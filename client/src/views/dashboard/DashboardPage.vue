@@ -24,12 +24,12 @@ onMounted(async () => {
   try {
     const [h, o] = await Promise.all([
       request.get('/health'),
-      request.get('/market/overview')
+      request.get('/market/overview').catch(() => ({ data: { up: 0, down: 0, flat: 0, sentiment: 50, industries: [] } }))
     ])
     health.value = h
-    overview.value = o.data
+    overview.value = o.data || { up: 0, down: 0, flat: 0, sentiment: 50, industries: [] }
     
-    updateCharts(o.data)
+    updateCharts(overview.value)
   } catch (e) {
     console.error(e)
   }

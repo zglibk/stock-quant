@@ -19,17 +19,17 @@ module.exports = (req, res, next) => {
 
   currentProcessing++;
   
-  // 响应结束时减少计数 (无论是正常结束、报错还是连接断开)
-  res.on('finish', () => {
-    currentProcessing = Math.max(0, currentProcessing - 1);
-  });
-  
-  res.on('close', () => {
-    // 防止 finish 没触发的情况
-    setTimeout(() => {
+  // 使用标记防止 finish + close 双减
+  let decremented = false;
+  const decrement = () => {
+    if (!decremented) {
+      decremented = true;
       currentProcessing = Math.max(0, currentProcessing - 1);
-    }, 1000);
-  });
+    }
+  };
+
+  res.on('finish', decrement);
+  res.on('close', decrement);
 
   next();
 };

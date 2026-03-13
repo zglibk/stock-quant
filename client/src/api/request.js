@@ -27,16 +27,24 @@ request.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && error.response?.data?.code === 'TOKEN_EXPIRED') {
+      if (!userStore.refreshToken) {
+        userStore.logout()
+        handleLoginExpired(userStore)
+        return Promise.reject(error.response?.data || error)
+      }
       try {
         const { data } = await axios.post('/api/auth/refresh', {
           refreshToken: userStore.refreshToken
+        }, {
+          timeout: 10000
         })
         userStore.setAuth({ user: userStore.user, ...data.data })
         error.config.headers.Authorization = `Bearer ${data.data.accessToken}`
         return request(error.config)
-      } catch {
+      } catch (refreshError) {
         userStore.logout()
         handleLoginExpired(userStore)
+        return Promise.reject(refreshError.response?.data || refreshError)
       }
     } else if (error.response?.status === 401) {
       userStore.logout()

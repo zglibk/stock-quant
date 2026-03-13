@@ -90,6 +90,31 @@ router.get('/indicators/:code', auth, async (req, res) => {
   }
 });
 
+// POST /api/market/calc-indicators - 手动触发指标计算
+router.post('/calc-indicators', auth, async (req, res) => {
+  try {
+    const codes = req.body.codes; // 可选，不传则计算全部
+    const indicatorCalc = require('../services/indicatorCalc');
+    const result = await indicatorCalc.calcAll(codes || undefined);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/market/realtime/:codes - 实时行情 (新浪)
+router.get('/realtime/:codes', auth, async (req, res) => {
+  try {
+    const codes = req.params.codes.split(',').map(c => c.trim()).filter(Boolean);
+    if (codes.length === 0) return res.status(400).json({ success: false, message: '请提供股票代码' });
+    if (codes.length > 50) return res.status(400).json({ success: false, message: '单次最多查询50只' });
+    const data = await dataFetcher.getRealtime(codes);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET /api/market/overview - 市场概览
 router.get('/overview', auth, async (req, res) => {
   try {

@@ -20,6 +20,7 @@ const code = String(route.params.code || '')
   .toUpperCase()
 const stock = ref(null)
 const klines = ref([])
+const indicators = ref([])
 const chartContainer = ref(null)
 const aiResult = ref('')
 const aiLoading = ref(false)
@@ -42,7 +43,12 @@ const aiMarkdownClass = computed(() => (isDark.value ? 'prose prose-invert prose
 const aiAssistantBubbleClass = computed(() => (isDark.value ? 'bg-gray-800 text-gray-300' : 'bg-slate-100 text-slate-700'))
 
 function goBack() {
-  router.back()
+  const hasBack = typeof window !== 'undefined' && window.history?.state?.back
+  if (hasBack) {
+    router.back()
+    return
+  }
+  router.push('/market')
 }
 
 const aiModels = ref([
@@ -86,6 +92,19 @@ const chatMessage = ref('')
 const chatMessages = ref([])
 let chart = null
 
+// 最新一条技术指标
+const latestIndicator = computed(() => {
+  if (!indicators.value.length) return null
+  return indicators.value[indicators.value.length - 1]
+})
+
+function rsiColor(val) {
+  if (val == null) return minorTextClass.value
+  if (val >= 70) return 'text-red-400'
+  if (val <= 30) return 'text-green-400'
+  return minorTextClass.value
+}
+
 onMounted(async () => {
   try {
     // 加载股票信息
@@ -95,6 +114,12 @@ onMounted(async () => {
     // 加载K线数据
     const klineRes = await request.get(`/market/kline/${code}`, { params: { limit: 250 } })
     klines.value = klineRes.data
+
+    // 加载技术指标
+    try {
+      const indRes = await request.get(`/market/indicators/${code}`, { params: { limit: 250 } })
+      indicators.value = indRes.data || []
+    } catch { indicators.value = [] }
 
     // 渲染图表
     await nextTick()
@@ -177,6 +202,35 @@ function renderChart() {
   })))
 
   chart.timeScale().fitContent()
+
+  // MA 均线叠加 (从 indicators 数据)
+  if (indicators.value.length > 0) {
+    const indMap = new Map(indicators.value.map(ind => [ind.date, ind]))
+
+    const addMaLine = (field, color, title) => {
+      const data = klines.value
+        .map(k => {
+          const ind = indMap.get(k.date)
+          const val = ind?.[field]
+          return val != null ? { time: k.date, value: val } : null
+        })
+        .filter(Boolean)
+      if (data.length > 0) {
+        const series = chart.addLineSeries({
+          color,
+          lineWidth: 1,
+          title,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        })
+        series.setData(data)
+      }
+    }
+
+    addMaLine('ma5',  '#f59e0b', 'MA5')
+    addMaLine('ma20', '#3b82f6', 'MA20')
+    addMaLine('ma60', '#8b5cf6', 'MA60')
+  }
 }
 
 watch(isDark, () => {
@@ -304,6 +358,36 @@ async function sendChat() {
           <div ref="chartContainer" class="w-full" style="min-height: 420px">
             <div v-if="klines.length === 0" class="flex items-center justify-center h-96" :class="emptyTextClass">
               暂无K线数据，请先在行情中心同步数据
+            </div>
+          </div>
+        </el-card>
+
+        <!-- 技术指标摘要 -->
+        <el-card v-if="latestIndicator" :class="cardClass" shadow="never" class="mt-3">
+          <template #header><span class="sq-section-title">📐 技术指标 · {{ latestIndicator.date }}</span></template>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+            <div>
+              <div :class="subtleTextClass">MACD</div>
+              <div>DIF: <span :class="(latestIndicator.macd?.dif || 0) >= 0 ? 'text-red-400' : 'text-green-400'">{{ latestIndicator.macd?.dif ?? '--' }}</span></div>
+              <div>DEA: <span :class="minorTextClass">{{ latestIndicator.macd?.dea ?? '--' }}</span></div>
+              <div>柱: <span :class="(latestIndicator.macd?.histogram || 0) >= 0 ? 'text-red-400' : 'text-green-400'">{{ latestIndicator.macd?.histogram ?? '--' }}</span></div>
+            </div>
+            <div>
+              <div :class="subtleTextClass">RSI</div>
+              <div>RSI6: <span :class="rsiColor(latestIndicator.rsi6)">{{ latestIndicator.rsi6 ?? '--' }}</span></div>
+              <div>RSI14: <span :class="rsiColor(latestIndicator.rsi14)">{{ latestIndicator.rsi14 ?? '--' }}</span></div>
+            </div>
+            <div>
+              <div :class="subtleTextClass">BOLL</div>
+              <div>上轨: <span :class="minorTextClass">{{ latestIndicator.boll?.upper ?? '--' }}</span></div>
+              <div>中轨: <span :class="minorTextClass">{{ latestIndicator.boll?.mid ?? '--' }}</span></div>
+              <div>下轨: <span :class="minorTextClass">{{ latestIndicator.boll?.lower ?? '--' }}</span></div>
+            </div>
+            <div>
+              <div :class="subtleTextClass">KDJ</div>
+              <div>K: <span :class="minorTextClass">{{ latestIndicator.kdj?.k ?? '--' }}</span></div>
+              <div>D: <span :class="minorTextClass">{{ latestIndicator.kdj?.d ?? '--' }}</span></div>
+              <div>J: <span :class="(latestIndicator.kdj?.j || 50) > 80 ? 'text-red-400' : (latestIndicator.kdj?.j || 50) < 20 ? 'text-green-400' : minorTextClass">{{ latestIndicator.kdj?.j ?? '--' }}</span></div>
             </div>
           </div>
         </el-card>

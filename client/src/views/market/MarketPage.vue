@@ -14,6 +14,7 @@ const keyword = ref('')
 const page = ref(1)
 const pageSize = ref(30)
 const syncLoading = ref(false)
+const calcLoading = ref(false)
 const syncStatus = ref(null)
 const syncScope = ref('all')
 const customCodes = ref('')
@@ -235,6 +236,21 @@ function handleSearch() {
   fetchStocks()
 }
 
+async function calcIndicators() {
+  calcLoading.value = true
+  try {
+    const res = await request.post('/market/calc-indicators')
+    const r = res.data || {}
+    ElMessage.success(`指标计算完成: 成功 ${r.success || 0} 只, 失败 ${r.failed || 0} 只`)
+    addSyncLog('success', `技术指标计算完成: 成功 ${r.success || 0}/${r.total || 0}`)
+  } catch (err) {
+    ElMessage.error('指标计算失败: ' + (err.message || ''))
+    addSyncLog('error', `技术指标计算失败: ${err.message || ''}`)
+  } finally {
+    calcLoading.value = false
+  }
+}
+
 function goDetail(code) {
   router.push(`/market/${code}`)
 }
@@ -281,6 +297,7 @@ watch(page, fetchStocks)
         <el-button type="warning" :loading="syncLoading || isSyncRunning" @click="syncData">
           {{ isSyncRunning ? '同步中' : '同步数据' }}
         </el-button>
+        <el-button type="success" :loading="calcLoading" @click="calcIndicators">📐 计算指标</el-button>
       </div>
     </div>
     <div v-if="syncScope === 'custom'" class="text-xs mb-2" :class="countTextClass">

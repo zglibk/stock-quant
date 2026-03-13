@@ -120,9 +120,9 @@ class DataFetcher {
   }
 
   // 计算技术指标
-  async calcIndicators() {
-    // TODO: Phase 1 后期实现
-    logger.info('[DataFetcher] 技术指标计算 (待实现)');
+  async calcIndicators(codes) {
+    const indicatorCalc = require('../indicatorCalc');
+    return indicatorCalc.calcAll(codes);
   }
 
   // 数据源健康检查
