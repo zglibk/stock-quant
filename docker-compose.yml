@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # -------- Express 主服务 --------
+  api:
+    build: ./server
+    container_name: sq-api
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/stock_quant
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongo
+      - redis
+    deploy:
+      resources:
+        limits:
+          memory: 512M    # 严格限制内存
+    networks:
+      - sq-net
+
+  # -------- MongoDB (内存优化) --------
+  mongo:
+    image: mongo:7
+    container_name: sq-mongo
+    restart: always
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    command: mongod --wiredTigerCacheSizeGB 0.4   # 限制缓存400MB
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+    networks:
+      - sq-net
+
+  # -------- Redis (内存优化) --------
+  redis:
+    image: redis:7-alpine
+    container_name: sq-redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 160M
+    volumes:
+      - redis-data:/data
+    networks:
+      - sq-net
+
+volumes:
+  mongo-data:
+  redis-data:
+
+networks:
+  sq-net:
+    driver: bridge

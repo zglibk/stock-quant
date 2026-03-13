@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>股票量化系统 - v3.1 图片识别分析功能补充</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+  :root{--bg-primary:#0a0e17;--bg-secondary:#111827;--bg-card:#1a2332;--bg-card-hover:#1f2b3d;--border:#2a3a52;--text-primary:#e2e8f0;--text-secondary:#94a3b8;--text-muted:#64748b;--accent-blue:#3b82f6;--accent-cyan:#06b6d4;--accent-green:#10b981;--accent-amber:#f59e0b;--accent-red:#ef4444;--accent-purple:#8b5cf6;--accent-ai:#f97316;--accent-vision:#14b8a6}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Noto Sans SC',sans-serif;background:var(--bg-primary);color:var(--text-primary);line-height:1.7}
+  body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background-image:linear-gradient(rgba(20,184,166,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(20,184,166,0.02) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
+  .container{max-width:1200px;margin:0 auto;padding:40px 24px;position:relative;z-index:1}
+  .hero{text-align:center;padding:50px 0 30px;position:relative}
+  .hero::before{content:'';position:absolute;top:-80px;left:50%;transform:translateX(-50%);width:500px;height:500px;background:radial-gradient(circle,rgba(20,184,166,0.06) 0%,rgba(249,115,22,0.04) 40%,transparent 70%);pointer-events:none}
+  .hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;background:linear-gradient(135deg,rgba(20,184,166,0.12),rgba(249,115,22,0.12));border:1px solid rgba(20,184,166,0.25);border-radius:20px;font-size:13px;color:var(--accent-vision);margin-bottom:20px;letter-spacing:1px}
+  .hero-badge::before{content:'';width:6px;height:6px;background:var(--accent-vision);border-radius:50%;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+  .hero h1{font-size:38px;font-weight:900;letter-spacing:-1px;background:linear-gradient(135deg,#e2e8f0 0%,#14b8a6 40%,#f97316 70%,#8b5cf6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .hero p{font-size:15px;color:var(--text-secondary);margin-top:12px;max-width:660px;margin-left:auto;margin-right:auto}
+
+  .nav-tabs{display:flex;gap:4px;justify-content:center;margin:36px auto 28px;padding:4px;background:var(--bg-secondary);border-radius:12px;border:1px solid var(--border);width:fit-content;flex-wrap:wrap}
+  .nav-tab{padding:10px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--text-muted);transition:all 0.2s;font-family:inherit;white-space:nowrap}
+  .nav-tab:hover{color:var(--text-primary)}
+  .nav-tab.active{background:var(--accent-vision);color:#fff;box-shadow:0 2px 8px rgba(20,184,166,0.3)}
+
+  .section{display:none;animation:fadeIn 0.3s ease}.section.active{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .section-header{margin-bottom:24px}
+  .section-header h2{font-size:24px;font-weight:700;margin-bottom:6px}
+  .section-header p{color:var(--text-secondary);font-size:14px}
+
+  .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+  .card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:24px;transition:all 0.25s;position:relative;overflow:hidden}
+  .card:hover{border-color:rgba(20,184,166,0.4);background:var(--bg-card-hover);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,0.3)}
+  .card-accent{position:absolute;top:0;left:0;right:0;height:3px}
+  .card-accent.vision{background:linear-gradient(135deg,#14b8a6,#06b6d4)}
+  .card-accent.ai{background:linear-gradient(135deg,#f97316,#ec4899)}
+  .card-accent.green{background:linear-gradient(135deg,#10b981,#06b6d4)}
+  .card-accent.blue{background:linear-gradient(135deg,#3b82f6,#06b6d4)}
+  .card-accent.purple{background:linear-gradient(135deg,#8b5cf6,#ec4899)}
+  .card h3{font-size:16px;font-weight:700;margin-bottom:6px}
+  .card .version{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent-cyan);margin-bottom:10px}
+  .card p{font-size:13px;color:var(--text-secondary);line-height:1.6}
+  .card .reason{margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.05);font-size:12px;color:var(--accent-green);display:flex;align-items:flex-start;gap:6px}
+  .card .reason::before{content:'✦';flex-shrink:0}
+
+  .card-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:16px}
+  .card-icon.vision{background:rgba(20,184,166,0.15);color:var(--accent-vision)}
+  .card-icon.ai{background:linear-gradient(135deg,rgba(249,115,22,0.2),rgba(236,72,153,0.15));color:var(--accent-ai)}
+  .card-icon.blue{background:rgba(59,130,246,0.15);color:var(--accent-blue)}
+  .card-icon.green{background:rgba(16,185,129,0.15);color:var(--accent-green)}
+  .card-icon.purple{background:rgba(139,92,246,0.15);color:var(--accent-purple)}
+
+  table.ct{width:100%;border-collapse:collapse;font-size:13px;margin-top:16px}
+  table.ct th{text-align:left;padding:12px 14px;background:rgba(20,184,166,0.08);border-bottom:2px solid var(--border);font-weight:600;color:var(--accent-vision);font-size:12px;text-transform:uppercase;letter-spacing:0.5px}
+  table.ct td{padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.04);color:var(--text-secondary)}
+  table.ct tr:hover td{background:rgba(255,255,255,0.02)}
+
+  .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:'JetBrains Mono',monospace}
+  .tag.rec{background:rgba(16,185,129,0.15);color:var(--accent-green)}
+  .tag.vision{background:rgba(20,184,166,0.15);color:var(--accent-vision)}
+  .tag.ai{background:linear-gradient(135deg,rgba(249,115,22,0.15),rgba(236,72,153,0.1));color:var(--accent-ai)}
+
+  .info-box{margin-top:20px;padding:20px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px}
+  .info-box h3{font-size:15px;margin-bottom:12px}.info-box p{font-size:13px;color:var(--text-secondary);line-height:1.8}
+  .info-box p+p{margin-top:6px}
+  .info-box.vision{border-color:rgba(20,184,166,0.2);background:linear-gradient(135deg,rgba(20,184,166,0.03),rgba(6,182,212,0.02))}
+  .info-box.ai{border-color:rgba(249,115,22,0.2);background:linear-gradient(135deg,rgba(249,115,22,0.03),rgba(236,72,153,0.02))}
+
+  .code-block{background:rgba(0,0,0,0.35);border:1px solid var(--border);border-radius:10px;padding:20px;margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:var(--text-secondary);overflow-x:auto;white-space:pre-wrap}
+  .code-block .comment{color:var(--accent-green);font-style:italic}
+  .code-block .keyword{color:var(--accent-purple)}.code-block .string{color:var(--accent-amber)}
+  .code-block .var{color:var(--accent-cyan)}.code-block .vision-hl{color:var(--accent-vision)}
+
+  .vision-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:700;background:rgba(20,184,166,0.15);color:var(--accent-vision);margin-left:4px;vertical-align:middle}
+
+  /* Flow diagram */
+  .flow-diagram{display:flex;align-items:center;gap:8px;padding:24px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow-x:auto;margin-top:16px;flex-wrap:nowrap}
+  .flow-step{flex-shrink:0;text-align:center;padding:16px 12px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:10px;min-width:130px}
+  .flow-step.vision-step{border-color:rgba(20,184,166,0.3);background:rgba(20,184,166,0.04)}
+  .flow-step.ai-step{border-color:rgba(249,115,22,0.3);background:rgba(249,115,22,0.04)}
+  .flow-step .step-icon{font-size:24px;margin-bottom:6px}
+  .flow-step .step-title{font-size:12px;font-weight:700;margin-bottom:2px}
+  .flow-step .step-desc{font-size:10px;color:var(--text-muted)}
+  .flow-arrow{color:var(--accent-vision);font-size:18px;font-weight:700;flex-shrink:0}
+
+  .prompt-box{background:rgba(0,0,0,0.35);border:1px solid rgba(20,184,166,0.2);border-radius:10px;padding:20px;margin-top:16px;font-family:'JetBrains Mono',monospace;font-size:12px;line-height:1.7;color:var(--text-secondary);overflow-x:auto;white-space:pre-wrap}
+  .prompt-box .role{color:var(--accent-vision);font-weight:700}
+  .prompt-box .var{color:var(--accent-cyan)}
+  .prompt-box .keyword{color:var(--accent-purple)}
+
+  .dir-tree{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:10px;padding:24px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.8;overflow-x:auto;white-space:pre;color:var(--text-secondary)}
+  .dir-tree .folder{color:var(--accent-blue);font-weight:600}.dir-tree .file{color:var(--text-muted)}
+  .dir-tree .comment{color:var(--accent-green);font-style:italic}
+  .dir-tree .vision-comment{color:var(--accent-vision);font-style:italic}
+  .dir-tree .ai-comment{color:var(--accent-ai);font-style:italic}
+
+  .cost-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:16px}
+  .cost-card{padding:16px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;text-align:center}
+  .cost-card .cost-label{font-size:12px;color:var(--text-muted);margin-bottom:4px}
+  .cost-card .cost-value{font-size:20px;font-weight:700;color:var(--accent-vision);font-family:'JetBrains Mono',monospace}
+  .cost-card .cost-note{font-size:11px;color:var(--text-muted);margin-top:4px}
+
+  .scene-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}
+  .scene-card{padding:20px;background:var(--bg-card);border:1px solid rgba(20,184,166,0.15);border-radius:10px}
+  .scene-card .scene-icon{font-size:28px;margin-bottom:10px}
+  .scene-card h4{font-size:14px;font-weight:700;margin-bottom:6px}
+  .scene-card p{font-size:12px;color:var(--text-muted);line-height:1.5}
+  .scene-card .scene-output{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);font-size:11px;color:var(--accent-vision)}
+
+  @media(max-width:768px){.hero h1{font-size:28px}.cards-grid{grid-template-columns:1fr}.container{padding:20px 16px}.flow-diagram{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="hero">
+    <div class="hero-badge">v3.1 UPDATE · VISION AI · IMAGE ANALYSIS</div>
+    <h1>新增：图片识别分析功能</h1>
+    <p>截图交易APP界面 → AI 多模态识别 → 智能分析<br>K线形态 · 持仓点评 · 指标提取 · 研报总结</p>
+  </div>
+
+  <div class="nav-tabs" id="navTabs">
+    <button class="nav-tab active" data-tab="overview">功能概览</button>
+    <button class="nav-tab" data-tab="architecture">技术架构</button>
+    <button class="nav-tab" data-tab="frontend">前端组件</button>
+    <button class="nav-tab" data-tab="backend">后端处理</button>
+    <button class="nav-tab" data-tab="prompts">Prompt 设计</button>
+    <button class="nav-tab" data-tab="structure">目录变更</button>
+    <button class="nav-tab" data-tab="cost">成本评估</button>
+  </div>
+
+  <!-- ============ OVERVIEW ============ -->
+  <div class="section active" id="overview">
+    <div class="section-header">
+      <h2>四大图片识别场景</h2>
+      <p>利用 LLM 多模态视觉能力，从交易 APP 截图中提取数据并智能分析</p>
+    </div>
+
+    <div class="scene-grid">
+      <div class="scene-card">
+        <div class="scene-icon">📊</div>
+        <h4>场景 1：K线图形态识别</h4>
+        <p>用户截图同花顺/东方财富等 APP 的 K 线图，AI 识别蜡烛图形态（头肩顶、双底、旗形等）、趋势方向、关键支撑压力位。</p>
+        <div class="scene-output">输出 → 形态名称 + 趋势判断 + 操作建议 + 关键价位标注</div>
+      </div>
+      <div class="scene-card">
+        <div class="scene-icon">💼</div>
+        <h4>场景 2：持仓/交割单识别</h4>
+        <p>截图持仓列表或交割单，AI 识别股票代码、持仓数量、成本价、盈亏比例等，生成持仓诊断报告。</p>
+        <div class="scene-output">输出 → 持仓结构化数据 + 风险评估 + 优化建议</div>
+      </div>
+      <div class="scene-card">
+        <div class="scene-icon">📋</div>
+        <h4>场景 3：个股详情页分析</h4>
+        <p>截图个股详情页面（含 PE/PB/换手率/量比等指标），AI 提取全部关键指标并综合分析基本面和技术面。</p>
+        <div class="scene-output">输出 → 提取指标表格 + 多维度评分 + 同行业对比</div>
+      </div>
+      <div class="scene-card">
+        <div class="scene-icon">📰</div>
+        <h4>场景 4：新闻/研报要点提取</h4>
+        <p>截图财经新闻、券商研报页面，AI 提取核心观点、目标价、评级变动等关键信息，生成简明摘要。</p>
+        <div class="scene-output">输出 → 关键要点列表 + 情绪判断 + 对相关股票的影响分析</div>
+      </div>
+    </div>
+
+    <div class="info-box vision" style="margin-top:24px">
+      <h3>💡 核心技术思路</h3>
+      <p>这个功能<strong style="color:var(--accent-vision)">不需要本地 OCR 或计算机视觉模型</strong>。Claude (Vision)、GPT-4o、DeepSeek-VL 等多模态大模型本身具备强大的图片理解能力——你发一张 K 线图截图给它，它能直接"看懂"蜡烛图形态、文字数据、指标数值。</p>
+      <p style="margin-top:8px">所以实现路径非常清晰：<strong style="color:var(--accent-vision)">前端上传图片 → 后端压缩 + 转 Base64 → 连同场景 Prompt 一起发给 LLM Vision API → 流式返回分析结果</strong>。完全复用现有 AI 网关，只需扩展支持图片消息格式。</p>
+    </div>
+
+    <!-- Data flow -->
+    <h3 style="font-size:15px;margin:28px 0 12px">完整数据流</h3>
+    <div class="flow-diagram">
+      <div class="flow-step vision-step"><div class="step-icon">📱</div><div class="step-title">拍照/截图</div><div class="step-desc">手机拍照或PC截图</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step vision-step"><div class="step-icon">⬆️</div><div class="step-title">上传图片</div><div class="step-desc">拖拽/粘贴/选择文件</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step vision-step"><div class="step-icon">🗜️</div><div class="step-title">压缩处理</div><div class="step-desc">前端 Canvas 压缩<br>限制 ≤2MB</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><div class="step-icon">📤</div><div class="step-title">API 上传</div><div class="step-desc">multipart/form-data<br>+ 场景类型</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><div class="step-icon">🔄</div><div class="step-title">后端处理</div><div class="step-desc">sharp 压缩<br>转 Base64</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step ai-step"><div class="step-icon">🧠</div><div class="step-title">LLM Vision</div><div class="step-desc">图片+Prompt<br>→ 多模态分析</div></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step ai-step"><div class="step-icon">📊</div><div class="step-title">SSE 流式</div><div class="step-desc">结构化结果<br>逐字返回</div></div>
+    </div>
+  </div>
+
+  <!-- ============ ARCHITECTURE ============ -->
+  <div class="section" id="architecture">
+    <div class="section-header">
+      <h2>技术架构设计</h2>
+      <p>在现有 AI 网关上扩展 Vision 能力，改动量极小</p>
+    </div>
+
+    <div class="info-box vision">
+      <h3>🔌 对现有架构的改动评估</h3>
+      <table class="ct">
+        <thead><tr><th>模块</th><th>改动量</th><th>具体内容</th></tr></thead>
+        <tbody>
+          <tr><td style="font-weight:600;color:var(--accent-blue)">前端</td><td><span class="tag vision">新增 ~200行</span></td><td>ImageUploader 组件（拖拽+粘贴+拍照）、Canvas 压缩、场景选择器</td></tr>
+          <tr><td style="font-weight:600;color:var(--accent-green)">后端 API</td><td><span class="tag vision">新增 ~80行</span></td><td>POST /api/ai/vision 路由，multer 文件上传 + sharp 压缩</td></tr>
+          <tr><td style="font-weight:600;color:var(--accent-ai)">AI 网关</td><td><span class="tag vision">修改 ~50行</span></td><td>各 Provider Adapter 的 chat() 方法支持 image_url 消息类型</td></tr>
+          <tr><td style="font-weight:600;color:var(--accent-ai)">Prompt 模板</td><td><span class="tag vision">新增 4个</span></td><td>K线识别、持仓识别、指标提取、研报摘要 四套 Prompt</td></tr>
+          <tr><td style="font-weight:600;color:var(--accent-purple)">MongoDB</td><td><span class="tag vision">新增 1个集合</span></td><td>vision_analyses — 存储图片分析历史记录</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px"><strong style="color:var(--accent-vision)">总结：新增约 300 行代码 + 4 个 Prompt 模板，不引入任何新的 npm 依赖（sharp 后端已有，multer 已有）。</strong></p>
+    </div>
+
+    <h3 style="font-size:15px;margin:28px 0 12px">LLM Vision API 多模型支持</h3>
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-accent vision"></div>
+        <div class="card-icon vision">👁️</div>
+        <h3>Claude Vision <span class="vision-badge">推荐</span></h3>
+        <div class="version">claude-sonnet-4-20250514 / claude-opus-4-6</div>
+        <p>Anthropic Claude 原生支持 Vision，图片直接放 messages 中的 image content block，支持 Base64 和 URL 两种方式。对金融图表的理解能力很强。</p>
+        <div class="reason">对中文财经截图识别准确度高，推荐作为首选视觉模型</div>
+      </div>
+
+      <div class="card">
+        <div class="card-accent vision"></div>
+        <div class="card-icon vision">👁️</div>
+        <h3>GPT-4o Vision</h3>
+        <div class="version">gpt-4o / gpt-4o-mini</div>
+        <p>OpenAI GPT-4o 多模态原生支持，图片作为 image_url 类型 content 传入。4o-mini 成本更低但识别能力略弱。</p>
+        <div class="reason">多模态能力成熟稳定，4o-mini 可用于低成本批量场景</div>
+      </div>
+
+      <div class="card">
+        <div class="card-accent vision"></div>
+        <div class="card-icon vision">👁️</div>
+        <h3>DeepSeek-VL</h3>
+        <div class="version">deepseek-chat (VL 能力)</div>
+        <p>DeepSeek 的多模态能力在持续增强中，作为低成本备选。API 调用格式与 OpenAI 兼容。</p>
+        <div class="reason">国内直连 + 低成本，适合非关键场景降级使用</div>
+      </div>
+    </div>
+
+    <div class="info-box" style="margin-top:20px">
+      <h3>📐 图片处理规格</h3>
+      <table class="ct">
+        <thead><tr><th>参数</th><th>规格</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td style="font-weight:600">最大上传尺寸</td><td>10 MB（原始）</td><td>前端校验，超过则提示</td></tr>
+          <tr><td style="font-weight:600">前端压缩后</td><td>≤ 2 MB</td><td>Canvas 压缩，quality 0.8</td></tr>
+          <tr><td style="font-weight:600">后端二次压缩</td><td>≤ 1 MB / 长边 ≤ 2048px</td><td>sharp 处理，确保 API 限制内</td></tr>
+          <tr><td style="font-weight:600">支持格式</td><td>JPEG / PNG / WebP</td><td>其他格式后端自动转 JPEG</td></tr>
+          <tr><td style="font-weight:600">传输方式</td><td>Base64 内嵌</td><td>不存图片文件，分析完即释放内存</td></tr>
+          <tr><td style="font-weight:600">存储策略</td><td>不存原图，只存分析结果</td><td>节省 2G 服务器的磁盘空间</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============ FRONTEND ============ -->
+  <div class="section" id="frontend">
+    <div class="section-header">
+      <h2>前端组件设计</h2>
+      <p>图片上传 + 场景选择 + 分析结果展示</p>
+    </div>
+
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-accent vision"></div>
+        <div class="card-icon vision">📸</div>
+        <h3>ImageUploader.vue</h3>
+        <div class="version">核心上传组件</div>
+        <p>三种上传方式：① 拖拽文件到区域 ② Ctrl+V 粘贴剪贴板截图（PC 最常用）③ 点击选择文件（手机拍照自动调起相机）。上传后 Canvas 前端压缩到 2MB 以内再发送。</p>
+        <div class="reason">粘贴截图是核心交互，PC端用户截图后直接 Ctrl+V 最高效</div>
+      </div>
+
+      <div class="card">
+        <div class="card-accent vision"></div>
+        <div class="card-icon vision">🎯</div>
+        <h3>SceneSelector.vue</h3>
+        <div class="version">场景选择器</div>
+        <p>四个场景卡片供用户选择：K线形态识别、持仓诊断、指标提取、研报摘要。选择场景后影响后端 Prompt 模板选择和输出格式。也可设计为"自动识别"模式（AI 自行判断图片类型）。</p>
+        <div class="reason">不同场景 Prompt 差异大，明确场景能显著提升分析质量</div>
+      </div>
+
+      <div class="card">
+        <div class="card-accent vision"></div>
+        <div class="card-icon vision">📊</div>
+        <h3>VisionResult.vue</h3>
+        <div class="version">分析结果展示</div>
+        <p>左侧显示上传的原图（可缩放），右侧 SSE 流式显示 AI 分析结果（Markdown 渲染）。持仓识别场景额外渲染结构化表格。支持"追问"功能（基于同一图片继续对话）。</p>
+        <div class="reason">图文并排布局，方便用户对照原图验证 AI 分析</div>
+      </div>
+    </div>
+
+    <div class="code-block" style="margin-top:20px"><span class="comment">// 前端 Canvas 图片压缩核心逻辑</span>
+<span class="comment">// client/src/utils/imageCompress.js</span>
+
+<span class="keyword">export function</span> compressImage(file, maxSizeMB = 2, maxDimension = 2048) {
+  <span class="keyword">return new</span> Promise((resolve) => {
+    <span class="keyword">const</span> reader = <span class="keyword">new</span> FileReader();
+    reader.onload = (e) => {
+      <span class="keyword">const</span> img = <span class="keyword">new</span> Image();
+      img.onload = () => {
+        <span class="keyword">const</span> canvas = document.createElement(<span class="string">'canvas'</span>);
+        <span class="keyword">let</span> { width, height } = img;
+
+        <span class="comment">// 限制最大尺寸</span>
+        <span class="keyword">if</span> (width > maxDimension || height > maxDimension) {
+          <span class="keyword">const</span> ratio = Math.min(maxDimension / width, maxDimension / height);
+          width *= ratio;
+          height *= ratio;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext(<span class="string">'2d'</span>).drawImage(img, 0, 0, width, height);
+
+        <span class="comment">// 递减 quality 直到小于 maxSize</span>
+        <span class="keyword">let</span> quality = 0.9;
+        <span class="keyword">let</span> blob;
+        <span class="keyword">const</span> tryCompress = () => {
+          canvas.toBlob((b) => {
+            <span class="keyword">if</span> (b.size > maxSizeMB * 1024 * 1024 && quality > 0.3) {
+              quality -= 0.1;
+              tryCompress();
+            } <span class="keyword">else</span> {
+              resolve(b);
+            }
+          }, <span class="string">'image/jpeg'</span>, quality);
+        };
+        tryCompress();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}</div>
+  </div>
+
+  <!-- ============ BACKEND ============ -->
+  <div class="section" id="backend">
+    <div class="section-header">
+      <h2>后端处理链路</h2>
+      <p>图片接收 → 压缩 → Base64 → LLM Vision API → SSE 流式返回</p>
+    </div>
+
+    <div class="code-block"><span class="comment">// server/routes/ai.js — 新增 Vision 路由</span>
+
+<span class="keyword">const</span> multer = require(<span class="string">'multer'</span>);
+<span class="keyword">const</span> sharp = require(<span class="string">'sharp'</span>);
+<span class="keyword">const</span> upload = multer({
+  storage: multer.memoryStorage(),  <span class="comment">// 内存存储，不写磁盘！(省磁盘 + 2G内存注意限制)</span>
+  limits: { fileSize: 10 * 1024 * 1024 },  <span class="comment">// 10MB 上限</span>
+  fileFilter: (req, file, cb) => {
+    <span class="keyword">const</span> allowed = [<span class="string">'image/jpeg'</span>, <span class="string">'image/png'</span>, <span class="string">'image/webp'</span>];
+    cb(<span class="keyword">null</span>, allowed.includes(file.mimetype));
+  }
+});
+
+<span class="comment">// POST /api/ai/vision — 图片分析</span>
+router.post(<span class="string">'/vision'</span>, auth, upload.single(<span class="string">'image'</span>), <span class="keyword">async</span> (req, res) => {
+  <span class="keyword">const</span> { scene } = req.body;  <span class="comment">// 'kline' | 'portfolio' | 'detail' | 'news' | 'auto'</span>
+
+  <span class="comment">// 1. sharp 二次压缩 (确保 ≤1MB, 长边 ≤2048px)</span>
+  <span class="keyword">const</span> compressed = <span class="keyword">await</span> sharp(req.file.buffer)
+    .resize(2048, 2048, { fit: <span class="string">'inside'</span>, withoutEnlargement: <span class="keyword">true</span> })
+    .jpeg({ quality: 80 })
+    .toBuffer();
+
+  <span class="comment">// 2. 转 Base64</span>
+  <span class="keyword">const</span> base64 = compressed.toString(<span class="string">'base64'</span>);
+  <span class="keyword">const</span> mediaType = <span class="string">'image/jpeg'</span>;
+
+  <span class="comment">// 3. 获取场景 Prompt</span>
+  <span class="keyword">const</span> prompt = promptEngine.getVisionPrompt(scene);
+
+  <span class="comment">// 4. 调用 LLM Vision API (通过现有网关)</span>
+  res.setHeader(<span class="string">'Content-Type'</span>, <span class="string">'text/event-stream'</span>);
+  res.setHeader(<span class="string">'Cache-Control'</span>, <span class="string">'no-cache'</span>);
+  res.setHeader(<span class="string">'Connection'</span>, <span class="string">'keep-alive'</span>);
+
+  <span class="keyword">const</span> stream = llmGateway.streamVision(
+    <span class="string">'stock-vision'</span>,  <span class="comment">// 场景名 → 自动路由到最合适的视觉模型</span>
+    prompt,
+    { base64, mediaType }
+  );
+
+  <span class="keyword">for await</span> (<span class="keyword">const</span> chunk <span class="keyword">of</span> stream) {
+    res.write(<span class="string">`data: ${JSON.stringify({ text: chunk })}\n\n`</span>);
+  }
+  res.write(<span class="string">'data: [DONE]\n\n'</span>);
+  res.end();
+});</div>
+
+    <div class="code-block" style="margin-top:16px"><span class="comment">// server/services/ai/llmGateway.js — 扩展 Vision 方法</span>
+<span class="comment">// 在现有 LLMGateway 类中新增:</span>
+
+<span class="keyword">async</span> *streamVision(scene, prompt, image) {
+  <span class="keyword">const</span> provider = this.getProviderForScene(scene);
+
+  <span class="comment">// 构建含图片的 messages (各 Provider 格式略有不同)</span>
+  <span class="keyword">const</span> messages = provider.buildVisionMessages(prompt, image);
+
+  <span class="comment">// 流式调用</span>
+  <span class="keyword">yield*</span> provider.stream(messages);
+}
+
+<span class="comment">// ---- Claude Adapter 中的 Vision 消息格式 ----</span>
+buildVisionMessages(prompt, { base64, mediaType }) {
+  <span class="keyword">return</span> [{
+    role: <span class="string">'user'</span>,
+    content: [
+      {
+        type: <span class="string">'image'</span>,
+        source: { type: <span class="string">'base64'</span>, media_type: mediaType, data: base64 }
+      },
+      { type: <span class="string">'text'</span>, text: prompt }
+    ]
+  }];
+}
+
+<span class="comment">// ---- OpenAI/DeepSeek Adapter 中的 Vision 消息格式 ----</span>
+buildVisionMessages(prompt, { base64, mediaType }) {
+  <span class="keyword">return</span> [{
+    role: <span class="string">'user'</span>,
+    content: [
+      {
+        type: <span class="string">'image_url'</span>,
+        image_url: { url: <span class="string">`data:${mediaType};base64,${base64}`</span> }
+      },
+      { type: <span class="string">'text'</span>, text: prompt }
+    ]
+  }];
+}</div>
+
+    <div class="info-box" style="margin-top:16px">
+      <h3>⚠️ 2G 内存服务器注意事项</h3>
+      <p><strong style="color:var(--accent-red)">图片不落盘</strong> — multer 用 memoryStorage，sharp 处理完后 Buffer 立即释放，不写磁盘文件。分析完成后只存文本结果到 MongoDB，不存原图。</p>
+      <p><strong style="color:var(--accent-red)">并发限制</strong> — 同一时刻只允许 2 个 Vision 请求并发（一张 2MB 图片 Base64 后约 2.7MB 内存），通过中间件限流。</p>
+      <p><strong style="color:var(--accent-red)">前端压缩是关键</strong> — 手机拍照原图可能 5-10MB，必须在前端 Canvas 压缩到 2MB 以内再上传，减轻服务器内存压力。</p>
+    </div>
+  </div>
+
+  <!-- ============ PROMPTS ============ -->
+  <div class="section" id="prompts">
+    <div class="section-header">
+      <h2>Vision Prompt 设计</h2>
+      <p>四个场景各有专属 Prompt 模板，引导 AI 精准分析图片内容</p>
+    </div>
+
+    <h3 style="font-size:15px;margin-bottom:12px">场景 1：K线图形态识别</h3>
+    <div class="prompt-box"><span class="role">[System]</span>
+你是专业的 A 股技术分析师，擅长从 K 线图中识别形态和趋势。
+
+<span class="role">[User - 附带图片]</span>
+请分析这张 K 线图截图，识别并回答以下内容：
+
+1. <span class="keyword">股票信息</span>：从图中提取股票代码和名称（如可见）
+2. <span class="keyword">K线形态</span>：识别当前形成的技术形态（如头肩顶/底、双重顶/底、旗形、楔形、三角形等）
+3. <span class="keyword">趋势判断</span>：当前处于上升/下降/震荡趋势，判断趋势强度
+4. <span class="keyword">均线系统</span>：如图中可见均线，分析均线排列（多头/空头/纠缠）
+5. <span class="keyword">关键价位</span>：标注支撑位和压力位
+6. <span class="keyword">量价关系</span>：如图中有成交量，分析量价配合情况
+7. <span class="keyword">操作建议</span>：基于以上分析给出短期操作建议
+
+<span class="role">[Output Format]</span>
+请用以下 JSON 格式返回，同时附带详细文字分析：
+{
+  "stock": "<span class="var">代码和名称</span>",
+  "pattern": "<span class="var">识别到的形态</span>",
+  "trend": "<span class="keyword">up | down | sideways</span>",
+  "support": <span class="var">支撑价位</span>,
+  "resistance": <span class="var">压力价位</span>,
+  "signal": "<span class="keyword">buy | sell | hold</span>",
+  "confidence": <span class="var">0.0-1.0</span>,
+  "analysis": "<span class="var">详细文字分析（200-400字）</span>"
+}</div>
+
+    <h3 style="font-size:15px;margin:28px 0 12px">场景 2：持仓/交割单识别</h3>
+    <div class="prompt-box"><span class="role">[System]</span>
+你是专业的投资组合顾问。请从用户上传的持仓截图或交割单中提取所有数据。
+
+<span class="role">[User - 附带图片]</span>
+请识别这张持仓/交割单截图中的全部信息：
+
+1. <span class="keyword">逐一提取</span>：每只股票的代码、名称、持仓数量、成本价、当前价、盈亏金额、盈亏比例
+2. <span class="keyword">持仓诊断</span>：分析持仓结构（行业集中度、仓位分布）
+3. <span class="keyword">风险评估</span>：识别高风险持仓（亏损过大、仓位过重、行业过于集中）
+4. <span class="keyword">优化建议</span>：给出持仓调整建议
+
+<span class="role">[Output Format]</span>
+{
+  "holdings": [
+    { "code": "...", "name": "...", "quantity": ..., "costPrice": ..., "currentPrice": ..., "pnl": ..., "pnlPercent": ... }
+  ],
+  "totalAssets": <span class="var">总资产</span>,
+  "totalPnl": <span class="var">总盈亏</span>,
+  "riskLevel": "<span class="keyword">low | medium | high</span>",
+  "diagnosis": "<span class="var">持仓诊断文字</span>",
+  "suggestions": ["<span class="var">建议1</span>", "<span class="var">建议2</span>"]
+}</div>
+
+    <h3 style="font-size:15px;margin:28px 0 12px">场景 3 & 4：指标提取 / 研报摘要</h3>
+    <div class="info-box">
+      <h3>📝 同样的模板模式</h3>
+      <p>场景 3（个股详情页）和场景 4（新闻/研报）也各有专属 Prompt，结构类似：引导 AI 从图片中提取特定类型的信息，按固定 JSON 格式输出结构化数据 + 自由文本分析。模板存储在 MongoDB 的 prompt_templates 集合中，管理员可在后台在线编辑调优。</p>
+    </div>
+  </div>
+
+  <!-- ============ STRUCTURE ============ -->
+  <div class="section" id="structure">
+    <div class="section-header">
+      <h2>目录结构变更 (v3.1)</h2>
+      <p>新增文件以 🔭 标记</p>
+    </div>
+    <div class="dir-tree"><span class="folder">stock-quant/</span>
+├── <span class="folder">client/src/</span>
+│   ├── <span class="folder">components/</span>
+│   │   ├── <span class="folder">ai/</span>
+│   │   │   ├── <span class="file">AiChatPanel.vue</span>
+│   │   │   ├── <span class="file">AiMessage.vue</span>
+│   │   │   ├── <span class="file">AiStreamText.vue</span>
+│   │   │   ├── <span class="file">ImageUploader.vue</span>     <span class="vision-comment"># 🔭 拖拽/粘贴/拍照上传</span>
+│   │   │   ├── <span class="file">SceneSelector.vue</span>     <span class="vision-comment"># 🔭 4场景选择器</span>
+│   │   │   └── <span class="file">VisionResult.vue</span>      <span class="vision-comment"># 🔭 图文并排结果展示</span>
+│   │   └── ...
+│   ├── <span class="folder">utils/</span>
+│   │   └── <span class="file">imageCompress.js</span>          <span class="vision-comment"># 🔭 Canvas 前端压缩</span>
+│   ├── <span class="folder">views/</span>
+│   │   └── <span class="folder">vision/</span>                   <span class="vision-comment"># 🔭 图片分析页面</span>
+│   │       └── <span class="file">VisionAnalysis.vue</span>    <span class="vision-comment"># 🔭 主页面(整合上传+场景+结果)</span>
+│   └── <span class="folder">api/</span>
+│       └── <span class="file">ai.js</span>                     <span class="vision-comment"># 扩展: 新增 postVisionAnalysis()</span>
+│
+├── <span class="folder">server/</span>
+│   ├── <span class="folder">routes/</span>
+│   │   └── <span class="file">ai.js</span>                     <span class="vision-comment"># 扩展: 新增 POST /api/ai/vision</span>
+│   ├── <span class="folder">middleware/</span>
+│   │   └── <span class="file">visionLimit.js</span>            <span class="vision-comment"># 🔭 Vision 并发限制中间件</span>
+│   ├── <span class="folder">services/ai/</span>
+│   │   ├── <span class="file">llmGateway.js</span>             <span class="vision-comment"># 扩展: 新增 streamVision()</span>
+│   │   ├── <span class="folder">providers/</span>
+│   │   │   ├── <span class="file">claudeAdapter.js</span>      <span class="vision-comment"># 扩展: buildVisionMessages()</span>
+│   │   │   ├── <span class="file">openaiAdapter.js</span>      <span class="vision-comment"># 扩展: buildVisionMessages()</span>
+│   │   │   └── <span class="file">deepseekAdapter.js</span>    <span class="vision-comment"># 扩展: buildVisionMessages()</span>
+│   │   └── <span class="file">imageProcessor.js</span>         <span class="vision-comment"># 🔭 sharp 压缩 + Base64 转换</span>
+│   ├── <span class="folder">models/</span>
+│   │   └── <span class="file">VisionAnalysis.js</span>         <span class="vision-comment"># 🔭 图片分析结果 Schema</span>
+│   └── <span class="folder">prompts/</span>
+│       ├── <span class="file">vision-kline.hbs</span>          <span class="vision-comment"># 🔭 K线形态识别模板</span>
+│       ├── <span class="file">vision-portfolio.hbs</span>      <span class="vision-comment"># 🔭 持仓识别模板</span>
+│       ├── <span class="file">vision-detail.hbs</span>         <span class="vision-comment"># 🔭 个股详情提取模板</span>
+│       └── <span class="file">vision-news.hbs</span>           <span class="vision-comment"># 🔭 研报摘要模板</span>
+</div>
+  </div>
+
+  <!-- ============ COST ============ -->
+  <div class="section" id="cost">
+    <div class="section-header">
+      <h2>Vision 功能成本评估</h2>
+      <p>图片分析的 token 消耗比纯文本高，但控制好图片尺寸就能有效控制成本</p>
+    </div>
+
+    <div class="cost-grid">
+      <div class="cost-card">
+        <div class="cost-label">单次图片分析 (Claude)</div>
+        <div class="cost-value">~¥0.15</div>
+        <div class="cost-note">~1500 image tokens + 500 output</div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-label">单次图片分析 (GPT-4o-mini)</div>
+        <div class="cost-value">~¥0.03</div>
+        <div class="cost-note">低成本视觉模型</div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-label">每日 20 次分析</div>
+        <div class="cost-value">~¥1-3</div>
+        <div class="cost-note">混合使用不同模型</div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-label">月估算 (中频)</div>
+        <div class="cost-value">~¥30-90</div>
+        <div class="cost-note">在原 AI 预算基础上增加</div>
+      </div>
+    </div>
+
+    <div class="info-box vision" style="margin-top:20px">
+      <h3>💰 成本控制策略</h3>
+      <p><strong style="color:var(--accent-vision)">① 图片压缩是关键</strong> — 图片尺寸直接影响 token 消耗。2048px 长边、80% JPEG quality 是最佳平衡点，既保证 AI 能看清细节，又不会产生过多 image tokens。</p>
+      <p><strong style="color:var(--accent-vision)">② 模型路由降级</strong> — K 线形态和研报摘要可以用 GPT-4o-mini（便宜），持仓识别需要更准确的数据提取用 Claude/GPT-4o。</p>
+      <p><strong style="color:var(--accent-vision)">③ 结果缓存</strong> — 同一张图片（通过 MD5 hash 判断）不重复分析，直接返回缓存结果。</p>
+      <p><strong style="color:var(--accent-vision)">④ 每用户日限额</strong> — Vision 分析比文本分析贵，单独设置每用户每日 Vision 调用次数上限（如 analyst 角色 30 次/日）。</p>
+    </div>
+
+    <div class="info-box" style="margin-top:16px">
+      <h3>📦 新增依赖总结</h3>
+      <table class="ct">
+        <thead><tr><th>依赖</th><th>用途</th><th>是否新增</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td style="font-weight:600">sharp</td><td>图片压缩 / 格式转换</td><td><span class="tag vision">新增</span></td><td>高性能 Node.js 图片处理库，~5MB</td></tr>
+          <tr><td style="font-weight:600">multer</td><td>文件上传中间件</td><td><span class="tag vision">新增</span></td><td>Express 标准文件上传方案</td></tr>
+          <tr><td style="font-weight:600">crypto (内置)</td><td>图片 MD5 hash</td><td>已有</td><td>Node.js 内置，用于缓存去重</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px;font-size:13px;color:var(--text-secondary)">仅新增 <strong>sharp</strong> 和 <strong>multer</strong> 两个 npm 包，其余全部复用现有 AI 网关能力。</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.getElementById('navTabs').addEventListener('click',e=>{
+    const tab=e.target.closest('.nav-tab');if(!tab)return;
+    const id=tab.dataset.tab;
+    document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');
+  });
+</script>
+</body>
+</html>

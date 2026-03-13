@@ -1,0 +1,35 @@
+你是一位专业的 A 股量化分析师。请基于以下数据对股票进行综合分析。
+
+{{#if mode}}
+**分析侧重**: {{mode}} (可选值: short-term 短线技术, long-term 长线价值, comprehensive 综合分析)
+{{/if}}
+
+股票: {{code}} {{name}} | 行业: {{industry}}
+最新价: {{latestPrice}} | 涨跌幅: {{changePercent}}%
+
+近期K线摘要: {{klineSummary}}
+
+技术指标:
+MA5={{ma5}} MA20={{ma20}} MA60={{ma60}}
+MACD: DIF={{dif}} DEA={{dea}} Hist={{histogram}}
+RSI(14)={{rsi14}}
+BOLL: Upper={{bollUp}} Mid={{bollMid}} Lower={{bollLow}}
+
+请严格以 JSON 格式返回分析结果：
+```json
+{
+  "score": 0,
+  "signal": "buy | sell | hold",
+  "confidence": 0.0,
+  "radar": {
+    "valuation": 0, "growth": 0, "profit": 0, "technical": 0, "capital": 0
+  },
+  "summary": "一句话核心观点",
+  "technicalView": "技术面详细分析(Markdown格式)",
+  "fundamentalView": "基本面详细分析(Markdown格式)",
+  "keyLevels": { "support": 0, "resistance": 0 },
+  "suggestions": ["操作建议1", "操作建议2"]
+}
+```
+
+注意：分析仅供参考，不构成投资建议。

@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Element Plus 暗色主题覆盖 */
+html.dark {
+  --el-bg-color: #1a2332;
+  --el-bg-color-overlay: #1f2b3d;
+  --el-text-color-primary: #e2e8f0;
+  --el-text-color-regular: #94a3b8;
+  --el-border-color: #2a3a52;
+  --el-color-primary: #3b82f6;
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* 自定义滚动条 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a3a52; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
+
+/* 防止 iOS 输入框自动缩放 (当字体 < 16px 时) */
+@media screen and (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+.sq-list-title {
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+html.dark .sq-list-title {
+  color: #e5e7eb;
+}
+
+.sq-page-title {
+  font-size: 1.5rem;
+  line-height: 2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+html.dark .sq-page-title {
+  color: #f3f4f6;
+}
+
+.sq-section-title {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+html.dark .sq-section-title {
+  color: #cbd5e1;
+}
+
+.sq-subtle-text {
+  color: #64748b;
+}
+
+html.dark .sq-subtle-text {
+  color: #94a3b8;
+}
+
+.sq-muted-text {
+  color: #475569;
+}
+
+html.dark .sq-muted-text {
+  color: #9ca3af;
+}
+
+.sq-list-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.sq-list-card .el-card__header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.sq-list-card .el-card__body {
+  padding: 16px;
+}
+
+html.dark .sq-list-card {
+  border-color: #1f2937;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+html.dark .sq-list-card .el-card__header {
+  border-bottom-color: #1f2937;
+}
+
+.sq-list-table .el-table__header-wrapper th.el-table__cell {
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 600;
+}
+
+.sq-list-table .el-table__body tr:hover > td.el-table__cell {
+  background: #eff6ff;
+}
+
+html.dark .sq-list-table .el-table__header-wrapper th.el-table__cell {
+  background: #111827;
+  color: #94a3b8;
+}
+
+html.dark .sq-list-table .el-table__body tr:hover > td.el-table__cell {
+  background: rgba(30, 41, 59, 0.55);
+}
