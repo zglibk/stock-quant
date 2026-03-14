@@ -43,12 +43,15 @@ const aiMarkdownClass = computed(() => (isDark.value ? 'prose prose-invert prose
 const aiAssistantBubbleClass = computed(() => (isDark.value ? 'bg-gray-800 text-gray-300' : 'bg-slate-100 text-slate-700'))
 
 function goBack() {
-  const hasBack = typeof window !== 'undefined' && window.history?.state?.back
-  if (hasBack) {
+  // 判断是否有来自本应用的历史记录可回退
+  // window.history.state.back 是 vue-router 写入的，为 null 表示没有上一页
+  const backPath = window.history?.state?.back
+  if (backPath && typeof backPath === 'string' && backPath !== '/login') {
     router.back()
-    return
+  } else {
+    // 没有有效历史或从外部直接进入，回到行情中心
+    router.replace('/market')
   }
-  router.push('/market')
 }
 
 const aiModels = ref([
@@ -143,9 +146,7 @@ onMounted(async () => {
   }
 })
 
-onUnmounted(() => {
-  if (chart) chart.remove()
-})
+// chart 销毁由下方统一的 onUnmounted 处理
 
 function renderChart() {
   chart = createChart(chartContainer.value, {

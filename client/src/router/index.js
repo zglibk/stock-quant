@@ -71,6 +71,11 @@ const routes = [
     name: 'Admin',
     component: () => import('@/views/admin/AdminPage.vue'),
     meta: { requiresAuth: true, roles: ['admin'] }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    redirect: '/dashboard'
   }
 ]
 

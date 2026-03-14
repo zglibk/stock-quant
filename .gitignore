@@ -14,3 +14,7 @@ data/
 
 # Temp uploads
 uploads/
+
+# Local SSH key artifacts
+quant
+quant.pub
