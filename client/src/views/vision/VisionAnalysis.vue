@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import aiApi from '@/api/ai'
 import { compressImage } from '@/utils/imageCompress'
@@ -13,6 +13,11 @@ const analyzing = ref(false)
 const result = ref('')
 const visionModel = ref('qwen_vl_lite')
 const aiParams = ref({})
+const statusText = ref('')       // 状态提示
+const elapsed = ref(0)           // 已用时(秒)
+const errorMsg = ref('')         // 错误信息
+let currentStream = null         // 当前流对象(用于 abort)
+let elapsedTimer = null          // 计时器
 
 const visionModels = ref([
   { label: 'Qwen2.5-VL 7B (Lite版，推荐)', value: 'qwen_vl_lite' },
@@ -31,45 +36,37 @@ const scenes = [
 const structuredData = computed(() => {
   if (!result.value) return null
   try {
-    // 1. 尝试匹配 Markdown 代码块中的 JSON
     const jsonMatch = result.value.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[1])
-    }
-    
-    // 2. 尝试直接解析整个字符串 (如果 AI 只返回了 JSON)
-    // 过滤掉可能的非 JSON 前缀/后缀
+    if (jsonMatch) return JSON.parse(jsonMatch[1])
     const firstBrace = result.value.indexOf('{')
     const lastBrace = result.value.lastIndexOf('}')
     if (firstBrace >= 0 && lastBrace > firstBrace) {
-      const potentialJson = result.value.slice(firstBrace, lastBrace + 1)
-      return JSON.parse(potentialJson)
+      return JSON.parse(result.value.slice(firstBrace, lastBrace + 1))
     }
-    
     return null
-  } catch (e) {
-    return null
-  }
+  } catch { return null }
 })
 
-// 渲染 analysis 字段的 Markdown
 const renderedAnalysis = computed(() => {
-  if (structuredData.value && structuredData.value.analysis) {
-    return md.render(structuredData.value.analysis)
-  }
+  if (structuredData.value?.analysis) return md.render(structuredData.value.analysis)
   return ''
+})
+
+// 格式化已用时间
+const elapsedText = computed(() => {
+  const s = elapsed.value
+  if (s < 60) return `${s}秒`
+  return `${Math.floor(s / 60)}分${s % 60}秒`
 })
 
 function handleFileChange(file) {
   if (!file) return
   const raw = file.raw || file
-  if (raw.size > 10 * 1024 * 1024) {
-    ElMessage.warning('图片大小不能超过 10MB')
-    return
-  }
+  if (raw.size > 10 * 1024 * 1024) { ElMessage.warning('图片大小不能超过 10MB'); return }
   imageFile.value = raw
   imagePreview.value = URL.createObjectURL(raw)
   result.value = ''
+  errorMsg.value = ''
 }
 
 function handlePaste(event) {
@@ -81,6 +78,7 @@ function handlePaste(event) {
       imageFile.value = file
       imagePreview.value = URL.createObjectURL(file)
       result.value = ''
+      errorMsg.value = ''
       ElMessage.success('已粘贴截图')
       break
     }
@@ -98,58 +96,154 @@ async function loadAiSettings() {
       const base = visionModels.value.filter(m => !String(m.value).startsWith('custom_'))
       visionModels.value = [...base, ...customVisionModels]
     }
-    if (data.defaults?.visionModel) {
-      visionModel.value = data.defaults.visionModel
-    }
+    if (data.defaults?.visionModel) visionModel.value = data.defaults.visionModel
   } catch {}
+}
+
+function startElapsedTimer() {
+  elapsed.value = 0
+  elapsedTimer = setInterval(() => { elapsed.value++ }, 1000)
+}
+function stopElapsedTimer() {
+  if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null }
 }
 
 async function startAnalysis() {
   if (!imageFile.value) return ElMessage.warning('请先上传或粘贴图片')
 
-  try {
-    analyzing.value = true
-    result.value = ''
+  analyzing.value = true
+  result.value = ''
+  errorMsg.value = ''
+  statusText.value = '正在压缩图片...'
+  startElapsedTimer()
 
-    console.log('开始压缩图片...')
-    // 1. 压缩图片 (最大 2MB)
+  try {
     const compressedFile = await compressImage(imageFile.value, 2, 2048)
-    console.log('图片压缩完成:', compressedFile.size)
-    
-    // 2. 上传分析
-    console.log('发起 Vision 请求:', scene.value, 'Model:', visionModel.value)
+    statusText.value = '图片已上传，等待 AI 响应...'
+
     const stream = aiApi.visionStream(compressedFile, scene.value, {
       model: visionModel.value,
       params: aiParams.value
     })
+    currentStream = stream  // 保存引用用于 abort
+
+    let chunkCount = 0
     for await (const chunk of stream) {
-      console.log('收到 chunk:', chunk)
+      chunkCount++
+      if (chunkCount === 1) statusText.value = 'AI 正在分析中...'
       result.value += chunk
     }
-    console.log('流接收完成')
+
+    statusText.value = chunkCount > 0 ? `分析完成 (${elapsedText.value})` : '未收到有效响应'
+    if (chunkCount === 0) {
+      errorMsg.value = 'AI 未返回任何内容，可能是模型不支持当前图片格式或请求被拒绝，请尝试切换模型'
+    }
   } catch (err) {
-    console.error('Vision 错误:', err)
-    const msg = String(err?.message || '')
-    if (msg.includes('403')) {
-      ElMessage.error('模型权限受限（403），已建议使用 Lite 模型或检查 API Key 权限')
-    } else if (msg.includes('400')) {
-      ElMessage.error('当前模型请求格式不被接受（400），请切换模型后重试')
+    if (err.name === 'AbortError' || String(err.message).includes('abort')) {
+      statusText.value = `已取消 (${elapsedText.value})`
+      ElMessage.info('已取消分析')
     } else {
-      ElMessage.error(err.message || '分析失败')
+      const msg = String(err?.message || '未知错误')
+      errorMsg.value = msg
+      statusText.value = `分析失败 (${elapsedText.value})`
+      if (msg.includes('403')) {
+        ElMessage.error('模型权限受限 (403)，请检查 API Key 或切换模型')
+      } else if (msg.includes('400')) {
+        ElMessage.error('请求格式不被接受 (400)，请切换模型后重试')
+      } else if (msg.includes('503')) {
+        ElMessage.error('服务器忙 (503)，请稍后重试')
+      } else {
+        ElMessage.error(msg)
+      }
     }
   } finally {
     analyzing.value = false
+    currentStream = null
+    stopElapsedTimer()
   }
 }
 
-onMounted(loadAiSettings)
+function cancelAnalysis() {
+  if (currentStream?.abort) {
+    currentStream.abort()
+  }
+}
+
+// === Vision 历史记录 ===
+const historyList = ref([])
+const historyLoading = ref(false)
+const showHistory = ref(false)
+
+async function loadHistory() {
+  historyLoading.value = true
+  try {
+    const res = await aiApi.getVisionHistory({ limit: 15 })
+    historyList.value = res.data?.records || []
+  } catch {} finally { historyLoading.value = false }
+}
+
+async function deleteHistory(id) {
+  try {
+    await aiApi.deleteVisionHistory(id)
+    historyList.value = historyList.value.filter(h => h._id !== id)
+    ElMessage.success('已删除')
+  } catch (err) { ElMessage.error(err.message || '删除失败') }
+}
+
+function viewHistory(record) {
+  result.value = record.rawText || ''
+  scene.value = record.scene || 'kline'
+  showHistory.value = false
+}
+
+function formatHistoryDate(v) {
+  if (!v) return '--'
+  return new Date(v).toLocaleString('zh-CN', { hour12: false })
+}
+
+const sceneLabel = (s) => {
+  const map = { kline: 'K线形态', portfolio: '持仓识别', detail: '个股详情', news: '研报摘要', auto: '自动识别' }
+  return map[s] || s
+}
+
+onMounted(() => { loadAiSettings(); loadHistory() })
+onUnmounted(stopElapsedTimer)
 </script>
 
 <template>
   <div @paste="handlePaste">
-    <h2 class="sq-list-title mb-4">📸 图片识别分析</h2>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="sq-list-title">📸 图片识别分析</h2>
+      <el-button text @click="showHistory = !showHistory">
+        {{ showHistory ? '返回分析' : `📋 历史记录 (${historyList.length})` }}
+      </el-button>
+    </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- 历史记录面板 -->
+    <div v-if="showHistory">
+      <el-card class="sq-list-card" v-loading="historyLoading">
+        <template #header><span class="sq-section-title">分析历史</span></template>
+        <div v-if="historyList.length === 0" class="text-center py-8 text-gray-500">暂无历史记录</div>
+        <div v-else class="space-y-2">
+          <div v-for="h in historyList" :key="h._id"
+            class="flex items-center justify-between p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 transition-all cursor-pointer"
+            @click="viewHistory(h)"
+          >
+            <div>
+              <el-tag size="small" effect="plain" class="mr-2">{{ sceneLabel(h.scene) }}</el-tag>
+              <span class="text-xs text-gray-500">{{ formatHistoryDate(h.createdAt) }}</span>
+              <span v-if="h.provider" class="text-xs text-gray-500 ml-2">{{ h.provider }}</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-gray-400">{{ h.rawText?.slice(0, 40) }}...</span>
+              <el-button text size="small" type="danger" @click.stop="deleteHistory(h._id)">删除</el-button>
+            </div>
+          </div>
+        </div>
+      </el-card>
+    </div>
+
+    <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <!-- 左侧: 上传 + 场景选择 -->
       <div class="space-y-4">
         <!-- 场景选择 -->
@@ -206,16 +300,27 @@ onMounted(loadAiSettings)
             </div>
           </el-upload>
 
-          <el-button
-            type="primary"
-            :loading="analyzing"
-            @click="startAnalysis"
-            class="w-full mt-4 font-bold"
-            :disabled="!imageFile"
-            size="large"
-          >
-            {{ analyzing ? 'AI 分析中...' : '开始分析' }}
-          </el-button>
+          <!-- 操作按钮区 -->
+          <div class="mt-4 space-y-2">
+            <div v-if="!analyzing" class="flex gap-2">
+              <el-button type="primary" @click="startAnalysis" class="flex-1 font-bold" :disabled="!imageFile" size="large">
+                开始分析
+              </el-button>
+            </div>
+            <div v-else class="flex gap-2">
+              <el-button type="primary" loading class="flex-1" size="large" disabled>
+                {{ statusText }} ({{ elapsedText }})
+              </el-button>
+              <el-button type="danger" plain size="large" @click="cancelAnalysis">取消</el-button>
+            </div>
+
+            <!-- 状态提示 -->
+            <div v-if="statusText && !analyzing" class="text-xs text-center" :class="errorMsg ? 'text-red-400' : 'text-green-400'">
+              {{ statusText }}
+            </div>
+            <!-- 错误详情 -->
+            <el-alert v-if="errorMsg" type="error" :title="errorMsg" show-icon closable @close="errorMsg = ''" class="!py-1" />
+          </div>
         </el-card>
       </div>
 
@@ -224,7 +329,8 @@ onMounted(loadAiSettings)
         <template #header>
           <div class="flex items-center justify-between">
             <span class="sq-section-title">分析结果</span>
-            <span v-if="analyzing" class="text-xs text-teal-500 animate-pulse">AI 正在思考...</span>
+            <span v-if="analyzing" class="text-xs text-teal-500 animate-pulse">{{ statusText }} · {{ elapsedText }}</span>
+            <span v-else-if="statusText && !errorMsg" class="text-xs text-green-500">{{ statusText }}</span>
           </div>
         </template>
 
@@ -410,5 +516,6 @@ onMounted(loadAiSettings)
         </div>
       </el-card>
     </div>
+    </div><!-- close v-else -->
   </div>
 </template>

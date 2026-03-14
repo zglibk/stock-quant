@@ -4,8 +4,8 @@
  * 从 DailyKline 读取数据，结果写入 Indicator 集合
  */
 const TI = require('technicalindicators');
-const { DailyKline, Indicator } = require('../../models/Market');
-const logger = require('../../utils/logger');
+const { DailyKline, Indicator } = require('../models/Market');
+const logger = require('../utils/logger');
 
 class IndicatorCalculator {
   /**
@@ -137,7 +137,7 @@ class IndicatorCalculator {
    * @param {string[]} codes - 指定股票代码列表，不传则计算所有
    */
   async calcAll(codes) {
-    const { Stock } = require('../../models/Market');
+    const { Stock } = require('../models/Market');
     if (!codes) {
       const stocks = await Stock.find({ isActive: true }).select('code').lean();
       codes = stocks.map(s => s.code);

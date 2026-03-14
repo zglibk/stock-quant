@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import request from '@/api/request'
 import { useUserStore } from '@/stores/userStore'
 import { useRouter } from 'vue-router'
@@ -15,19 +15,61 @@ const router = useRouter()
 const userStore = useUserStore()
 const health = ref(null)
 const overview = ref(null)
+const currentTime = ref('')
+const liveUptime = ref(0)      // 动态递增的运行秒数
+let clockTimer = null
+let startUptime = 0            // health 接口返回的起始值
+let startedAt = 0              // 本地记录接口调用时间
+
+function formatTime(date) {
+  const d = date instanceof Date ? date : new Date(date)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+function formatUptime(seconds) {
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (d > 0) return `${d}天${h}时${m}分`
+  if (h > 0) return `${h}时${m}分${s}秒`
+  return `${m}分${s}秒`
+}
+
+function startClock() {
+  const tick = () => {
+    currentTime.value = formatTime(new Date())
+    if (startUptime > 0) {
+      const elapsed = (Date.now() - startedAt) / 1000
+      liveUptime.value = startUptime + elapsed
+    }
+  }
+  tick()
+  clockTimer = setInterval(tick, 1000)
+}
+
+onUnmounted(() => { if (clockTimer) clearInterval(clockTimer) })
 
 const sentimentOption = ref({})
 const industryOption = ref({})
 const distributionOption = ref({})
+const watchlist = ref([])
 
 onMounted(async () => {
+  startClock()
   try {
-    const [h, o] = await Promise.all([
+    const [h, o, wl] = await Promise.all([
       request.get('/health'),
-      request.get('/market/overview').catch(() => ({ data: { up: 0, down: 0, flat: 0, sentiment: 50, industries: [] } }))
+      request.get('/market/overview').catch(() => ({ data: { up: 0, down: 0, flat: 0, sentiment: 50, industries: [] } })),
+      request.get('/ai/watchlist').catch(() => ({ data: [] }))
     ])
     health.value = h
+    startUptime = h.uptime || 0
+    startedAt = Date.now()
+    liveUptime.value = startUptime
     overview.value = o.data || { up: 0, down: 0, flat: 0, sentiment: 50, industries: [] }
+    watchlist.value = wl.data || []
     
     updateCharts(overview.value)
   } catch (e) {
@@ -148,6 +190,29 @@ const quickActions = [
       </el-card>
     </div>
 
+    <!-- 自选股 -->
+    <el-card v-if="watchlist.length > 0" class="mb-6 bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 shadow-sm" shadow="hover">
+      <template #header>
+        <div class="flex justify-between items-center">
+          <span class="sq-section-title">⭐ 我的自选</span>
+          <el-button text size="small" @click="router.push('/market')">查看全部</el-button>
+        </div>
+      </template>
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+        <div
+          v-for="s in watchlist" :key="s.code"
+          @click="router.push(`/market/${s.code}`)"
+          class="p-3 rounded-lg border border-gray-100 dark:border-gray-800 hover:border-blue-400 dark:hover:border-blue-500 cursor-pointer transition-all text-center"
+        >
+          <div class="text-xs text-blue-400 font-mono">{{ s.code }}</div>
+          <div class="text-sm font-bold text-gray-800 dark:text-gray-200 truncate">{{ s.name }}</div>
+          <div class="text-xs font-mono mt-1" :class="(s.changePercent || 0) >= 0 ? 'text-red-500' : 'text-green-500'">
+            {{ s.price || '--' }} <span class="text-[10px]">{{ (s.changePercent || 0) >= 0 ? '+' : '' }}{{ (s.changePercent || 0).toFixed(2) }}%</span>
+          </div>
+        </div>
+      </div>
+    </el-card>
+
     <!-- 快捷入口 -->
     <h3 class="sq-section-title mb-3 uppercase tracking-wider">快捷入口</h3>
     <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
@@ -167,9 +232,9 @@ const quickActions = [
       <template #header><span class="sq-section-title">系统状态</span></template>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
         <div><span class="text-gray-500 dark:text-gray-400">版本: </span><span class="text-gray-700 dark:text-gray-200">{{ health.version }}</span></div>
-        <div><span class="text-gray-500 dark:text-gray-400">运行: </span><span class="text-gray-700 dark:text-gray-200">{{ Math.round(health.uptime / 60) }} 分钟</span></div>
+        <div><span class="text-gray-500 dark:text-gray-400">运行: </span><span class="text-gray-700 dark:text-gray-200">{{ formatUptime(liveUptime) }}</span></div>
         <div><span class="text-gray-500 dark:text-gray-400">内存: </span><span class="text-gray-700 dark:text-gray-200">{{ health.memory }}</span></div>
-        <div><span class="text-gray-500 dark:text-gray-400">时间: </span><span class="text-gray-700 dark:text-gray-200">{{ health.timestamp?.slice(0, 19) }}</span></div>
+        <div><span class="text-gray-500 dark:text-gray-400">时间: </span><span class="text-gray-700 dark:text-gray-200 font-mono">{{ currentTime }}</span></div>
       </div>
     </el-card>
   </div>

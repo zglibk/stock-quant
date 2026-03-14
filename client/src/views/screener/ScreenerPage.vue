@@ -1,5 +1,5 @@
 <script setup>
-import { computed, reactive, ref, onMounted } from 'vue'
+import { computed, reactive, ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import marketApi from '@/api/market'
@@ -12,6 +12,11 @@ const industries = ref([])
 const aiScreening = ref(false)
 const aiResult = ref('')
 const showAiPanel = ref(false)
+const aiStatusText = ref('')
+const aiElapsed = ref(0)
+const aiErrorMsg = ref('')
+let aiStream = null
+let aiTimer = null
 
 const filters = reactive({
   q: '',
@@ -37,7 +42,6 @@ const filteredList = computed(() => {
     return true
   })
 
-  // 排序
   if (filters.sortField) {
     result.sort((a, b) => {
       const va = Number(a[filters.sortField] ?? 0)
@@ -45,8 +49,13 @@ const filteredList = computed(() => {
       return filters.sortOrder === 'desc' ? vb - va : va - vb
     })
   }
-
   return result
+})
+
+const aiElapsedText = computed(() => {
+  const s = aiElapsed.value
+  if (s < 60) return `${s}秒`
+  return `${Math.floor(s / 60)}分${s % 60}秒`
 })
 
 async function loadStocks() {
@@ -93,31 +102,70 @@ function handleSortChange({ prop, order }) {
 
 // AI 智能选股
 async function aiScreen() {
+  if (filteredList.value.length === 0) { ElMessage.warning('筛选结果为空，请先调整条件'); return }
+
   aiScreening.value = true
   aiResult.value = ''
+  aiErrorMsg.value = ''
   showAiPanel.value = true
+  aiStatusText.value = '正在构建分析上下文...'
+  aiElapsed.value = 0
+  aiTimer = setInterval(() => { aiElapsed.value++ }, 1000)
+
   try {
     const topList = filteredList.value.slice(0, 20).map(s => `${s.code} ${s.name} 涨幅${s.changePercent}% PE=${s.pe} PB=${s.pb}`).join('\n')
     const prompt = `当前筛选出的股票列表（前20只）:\n${topList}\n\n请从中选出最值得关注的3-5只股票，给出理由和操作建议。分析每只股票的技术面和基本面，最后给出综合评分(1-100)。`
+
+    aiStatusText.value = '等待 AI 响应...'
     const stream = aiApi.chat(prompt)
+    aiStream = stream
+
+    let chunkCount = 0
     for await (const chunk of stream) {
+      chunkCount++
+      if (chunkCount === 1) aiStatusText.value = 'AI 正在分析中...'
       aiResult.value += chunk
     }
+
+    aiStatusText.value = chunkCount > 0 ? `分析完成 (${aiElapsedText.value})` : 'AI 未返回有效内容'
+    if (chunkCount === 0) {
+      aiErrorMsg.value = '未收到 AI 响应，请检查模型配置或稍后重试'
+    }
   } catch (err) {
-    ElMessage.error('AI选股失败: ' + (err.message || ''))
+    if (err.name === 'AbortError' || String(err.message).includes('abort')) {
+      aiStatusText.value = `已取消 (${aiElapsedText.value})`
+      ElMessage.info('已取消 AI 选股')
+    } else {
+      aiErrorMsg.value = err.message || '未知错误'
+      aiStatusText.value = `分析失败 (${aiElapsedText.value})`
+      ElMessage.error('AI选股失败: ' + (err.message || ''))
+    }
   } finally {
     aiScreening.value = false
+    aiStream = null
+    if (aiTimer) { clearInterval(aiTimer); aiTimer = null }
   }
 }
 
+function cancelAiScreen() {
+  if (aiStream?.abort) aiStream.abort()
+}
+
 onMounted(loadStocks)
+onUnmounted(() => { if (aiTimer) clearInterval(aiTimer) })
 </script>
 
 <template>
   <div>
     <div class="flex items-center justify-between mb-4">
       <h2 class="sq-list-title">🔍 选股筛选</h2>
-      <el-button type="warning" :loading="aiScreening" @click="aiScreen">🧠 AI 智能选股</el-button>
+      <div class="flex items-center gap-2">
+        <el-button v-if="!aiScreening" type="warning" @click="aiScreen">🧠 AI 智能选股</el-button>
+        <template v-else>
+          <el-button type="warning" loading disabled>{{ aiStatusText }} ({{ aiElapsedText }})</el-button>
+          <el-button type="danger" plain @click="cancelAiScreen">取消</el-button>
+        </template>
+      </div>
     </div>
 
     <!-- 筛选条件 -->
@@ -160,14 +208,22 @@ onMounted(loadStocks)
       <template #header>
         <div class="flex justify-between items-center">
           <span class="sq-section-title text-orange-400">🧠 AI 智能选股结果</span>
-          <el-button text size="small" @click="showAiPanel = false">收起</el-button>
+          <div class="flex items-center gap-2">
+            <span v-if="aiScreening" class="text-xs text-teal-500 animate-pulse">{{ aiStatusText }} · {{ aiElapsedText }}</span>
+            <span v-else-if="aiStatusText && !aiErrorMsg" class="text-xs text-green-500">{{ aiStatusText }}</span>
+            <el-button text size="small" @click="showAiPanel = false">收起</el-button>
+          </div>
         </div>
       </template>
-      <div v-if="aiResult" class="text-sm leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto text-gray-300">
+      <el-alert v-if="aiErrorMsg" type="error" :title="aiErrorMsg" show-icon closable @close="aiErrorMsg = ''" class="!mb-3 !py-1" />
+      <div v-if="aiResult" class="text-sm leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto text-gray-700 dark:text-gray-300">
         {{ aiResult }}
       </div>
-      <div v-else-if="aiScreening" class="text-center py-6 text-gray-500 animate-pulse">AI 正在分析中...</div>
-      <div v-else class="text-center py-4 text-gray-500">点击"AI 智能选股"开始</div>
+      <div v-else-if="aiScreening" class="text-center py-6 text-gray-500">
+        <div class="animate-pulse mb-2">{{ aiStatusText }}</div>
+        <div class="text-xs">已用时: {{ aiElapsedText }}</div>
+      </div>
+      <div v-else class="text-center py-4 text-gray-500">点击"AI 智能选股"开始分析</div>
     </el-card>
 
     <!-- 股票列表 -->

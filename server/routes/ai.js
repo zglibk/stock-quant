@@ -494,4 +494,81 @@ async function saveConversation(userId, convId, userMsg, aiMsg, context) {
   }
 }
 
+// ==================== Vision 历史记录 ====================
+// GET /api/ai/vision/history
+router.get('/vision/history', auth, async (req, res) => {
+  try {
+    const { limit = 20, page = 1 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    const [records, total] = await Promise.all([
+      VisionAnalysis.find({ userId: req.userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      VisionAnalysis.countDocuments({ userId: req.userId })
+    ]);
+    res.json({ success: true, data: { records, total, page: Number(page), limit: Number(limit) } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE /api/ai/vision/history/:id
+router.delete('/vision/history/:id', auth, async (req, res) => {
+  try {
+    await VisionAnalysis.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    res.json({ success: true, message: '已删除' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ==================== 自选股管理 ====================
+// GET /api/ai/watchlist
+router.get('/watchlist', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId).select('settings.watchlist').lean();
+    const codes = user?.settings?.watchlist || [];
+    // 拉取自选股的基础信息
+    if (codes.length > 0) {
+      const { Stock } = require('../models/Market');
+      const stocks = await Stock.find({ code: { $in: codes }, isActive: true })
+        .select('code name market industry price changePercent pe pb')
+        .lean();
+      // 按 watchlist 顺序排列
+      const stockMap = new Map(stocks.map(s => [s.code, s]));
+      const ordered = codes.map(c => stockMap.get(c)).filter(Boolean);
+      res.json({ success: true, data: ordered });
+    } else {
+      res.json({ success: true, data: [] });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/ai/watchlist/add
+router.post('/watchlist/add', auth, async (req, res) => {
+  try {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ success: false, message: '请提供股票代码' });
+    await User.findByIdAndUpdate(req.userId, { $addToSet: { 'settings.watchlist': code } });
+    res.json({ success: true, message: '已加入自选' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// POST /api/ai/watchlist/remove
+router.post('/watchlist/remove', auth, async (req, res) => {
+  try {
+    const { code } = req.body;
+    await User.findByIdAndUpdate(req.userId, { $pull: { 'settings.watchlist': code } });
+    res.json({ success: true, message: '已移除自选' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 module.exports = router;

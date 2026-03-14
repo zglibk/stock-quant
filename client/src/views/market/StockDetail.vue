@@ -93,6 +93,7 @@ const aiData = computed(() => {
 
 const chatMessage = ref('')
 const chatMessages = ref([])
+const isInWatchlist = ref(false)
 let chart = null
 
 // 最新一条技术指标
@@ -141,6 +142,13 @@ onMounted(async () => {
     if (aiSettings.defaults?.analysisModel) {
       aiModel.value = aiSettings.defaults.analysisModel
     }
+
+    // 检查是否在自选股中
+    try {
+      const wlRes = await aiApi.getWatchlist()
+      const wlCodes = (wlRes.data || []).map(s => s.code)
+      isInWatchlist.value = wlCodes.includes(code)
+    } catch {}
   } catch (e) {
     console.error(e)
   }
@@ -269,6 +277,23 @@ onUnmounted(() => {
   }
 })
 
+// 自选股切换
+async function toggleWatchlist() {
+  try {
+    if (isInWatchlist.value) {
+      await aiApi.removeFromWatchlist(code)
+      isInWatchlist.value = false
+      ElMessage.success('已移除自选')
+    } else {
+      await aiApi.addToWatchlist(code)
+      isInWatchlist.value = true
+      ElMessage.success('已加入自选')
+    }
+  } catch (e) {
+    ElMessage.error(e.message || '操作失败')
+  }
+}
+
 // AI 一键分析
 async function aiAnalyze() {
   aiLoading.value = true
@@ -343,7 +368,12 @@ async function sendChat() {
           </div>
         </div>
       </div>
-      <el-button type="warning" :loading="aiLoading" @click="aiAnalyze">🧠 AI 分析</el-button>
+      <div class="flex gap-2">
+        <el-button :type="isInWatchlist ? 'info' : 'primary'" plain @click="toggleWatchlist">
+          {{ isInWatchlist ? '★ 已自选' : '☆ 加自选' }}
+        </el-button>
+        <el-button type="warning" :loading="aiLoading" @click="aiAnalyze">🧠 AI 分析</el-button>
+      </div>
     </div>
 
     <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">

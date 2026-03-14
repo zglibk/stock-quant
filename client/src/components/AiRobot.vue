@@ -6,139 +6,98 @@ const isDragging = ref(false)
 const isHover = ref(false)
 const isPressed = ref(false)
 const isActive = ref(false)
+const isWaving = ref(false)
 const showSpeech = ref(false)
 const speechText = ref('')
 const speechAlign = ref('right')
-let startX = 0
-let startY = 0
-let initialX = 0
-let initialY = 0
-let currentX = 0
-let currentY = 0
-let activeTimer = null
-let speechTimer = null
+let startX = 0, startY = 0, initialX = 0, initialY = 0, currentX = 0, currentY = 0
+let activeTimer = null, speechTimer = null, waveTimer = null, idleTimer = null
 const uid = Math.random().toString(36).slice(2, 10)
-const metalGradientId = `metal-gradient-${uid}`
-const darkMetalGradientId = `dark-metal-gradient-${uid}`
-const eyeGlowId = `eye-glow-${uid}`
-const coreGlowId = `core-glow-${uid}`
-const orbitGradientId = `orbit-gradient-${uid}`
-const orbitPathId = `orbitPath-${uid}`
-const tapPhrases = ['你好呀', '已收到', '一起分析吧', '今天也要加油', '准备就绪']
-const hoverPhrases = ['嗨～', '点我互动', '我在这里', '有问题尽管问']
+const metalGradientId = `mg-${uid}`
+const darkMetalGradientId = `dmg-${uid}`
+const eyeGlowId = `eg-${uid}`
+const coreGlowId = `cg-${uid}`
+const tapPhrases = ['你好呀 👋', '已收到！', '一起分析吧 📊', '今天也要加油 💪', '准备就绪 ✨', '交给我吧！']
+const hoverPhrases = ['嗨～', '点我互动 👆', '我在这里', '有问题尽管问 🤖']
+const idlePhrases = ['在吗？👀', '好安静啊...', '需要帮忙吗？']
 
 const updateSpeechAlign = () => {
   if (!containerRef.value) return
   const rect = containerRef.value.getBoundingClientRect()
-  const safeWidth = 190
-  const canExpandRight = window.innerWidth - rect.right >= safeWidth
-  const canExpandLeft = rect.left >= safeWidth
-  if (!canExpandRight && canExpandLeft) {
-    speechAlign.value = 'left'
-    return
-  }
-  if (!canExpandLeft && canExpandRight) {
-    speechAlign.value = 'right'
-    return
-  }
+  const safe = 190
+  const canR = window.innerWidth - rect.right >= safe
+  const canL = rect.left >= safe
+  if (!canR && canL) { speechAlign.value = 'left'; return }
+  if (!canL && canR) { speechAlign.value = 'right'; return }
   speechAlign.value = rect.left < window.innerWidth * 0.52 ? 'right' : 'left'
 }
 
-const speak = (text, duration = 1800) => {
+const speak = (text, duration = 2000) => {
   updateSpeechAlign()
   speechText.value = text
   showSpeech.value = true
   if (speechTimer) clearTimeout(speechTimer)
-  speechTimer = setTimeout(() => {
-    showSpeech.value = false
-    speechTimer = null
-  }, duration)
+  speechTimer = setTimeout(() => { showSpeech.value = false; speechTimer = null }, duration)
 }
 
 const speakRandom = (type = 'tap') => {
-  const pool = type === 'hover' ? hoverPhrases : tapPhrases
-  const text = pool[Math.floor(Math.random() * pool.length)]
-  speak(text, type === 'hover' ? 1300 : 1800)
+  const pool = type === 'hover' ? hoverPhrases : (type === 'idle' ? idlePhrases : tapPhrases)
+  speak(pool[Math.floor(Math.random() * pool.length)], type === 'hover' ? 1400 : 2200)
 }
 
 const activateEffect = () => {
   isActive.value = false
   speakRandom('tap')
   if (activeTimer) clearTimeout(activeTimer)
+  isWaving.value = true
+  if (waveTimer) clearTimeout(waveTimer)
+  waveTimer = setTimeout(() => { isWaving.value = false; waveTimer = null }, 1200)
   requestAnimationFrame(() => {
     isActive.value = true
-    activeTimer = setTimeout(() => {
-      isActive.value = false
-      activeTimer = null
-    }, 320)
+    activeTimer = setTimeout(() => { isActive.value = false; activeTimer = null }, 500)
   })
 }
 
+const startIdleCheck = () => {
+  if (idleTimer) clearTimeout(idleTimer)
+  idleTimer = setTimeout(() => {
+    if (!isHover.value && !isDragging.value && !showSpeech.value) {
+      speakRandom('idle')
+      isWaving.value = true
+      setTimeout(() => { isWaving.value = false }, 1000)
+    }
+    startIdleCheck()
+  }, 15000 + Math.random() * 10000)
+}
+
 const handleStart = (e) => {
-  // 阻止默认拖拽行为（避免拖拽图片/SVG ghost）
   if (e.type === 'mousedown') e.preventDefault()
-  
-  isDragging.value = true
-  isPressed.value = true
-  activateEffect()
-  const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX
-  const clientY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY
-  startX = clientX
-  startY = clientY
-  
-  // 记录当前的偏移量作为起始点
-  initialX = currentX
-  initialY = currentY
-  
-  // 改变鼠标样式
-  if (containerRef.value) {
-    containerRef.value.style.cursor = 'grabbing'
-  }
+  isDragging.value = true; isPressed.value = true; activateEffect()
+  const cx = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX
+  const cy = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY
+  startX = cx; startY = cy; initialX = currentX; initialY = currentY
+  if (containerRef.value) containerRef.value.style.cursor = 'grabbing'
+  startIdleCheck()
 }
 
 const handleMove = (e) => {
   if (!isDragging.value) return
-  
-  // 阻止触摸移动时的默认滚动行为
-  if (e.type === 'touchmove') {
-    e.preventDefault()
-  }
-  
-  const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX
-  const clientY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY
-  
-  const dx = clientX - startX
-  const dy = clientY - startY
-  
-  currentX = initialX + dx
-  currentY = initialY + dy
-  
-  if (containerRef.value) {
-    containerRef.value.style.transform = `translate(${currentX}px, ${currentY}px)`
-  }
+  if (e.type === 'touchmove') e.preventDefault()
+  const cx = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX
+  const cy = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY
+  currentX = initialX + (cx - startX); currentY = initialY + (cy - startY)
+  if (containerRef.value) containerRef.value.style.transform = `translate(${currentX}px, ${currentY}px)`
   updateSpeechAlign()
 }
 
 const handleEnd = () => {
-  isDragging.value = false
-  isPressed.value = false
-  if (containerRef.value) {
-    containerRef.value.style.cursor = 'grab'
-  }
+  isDragging.value = false; isPressed.value = false
+  if (containerRef.value) containerRef.value.style.cursor = 'grab'
 }
 
-const handleEnter = () => {
-  isHover.value = true
-  if (!showSpeech.value) speakRandom('hover')
-}
-
-const handleLeave = () => {
-  isHover.value = false
-}
-
-const handleActivate = () => {
-  activateEffect()
-}
+const handleEnter = () => { isHover.value = true; if (!showSpeech.value) speakRandom('hover'); startIdleCheck() }
+const handleLeave = () => { isHover.value = false }
+const handleActivate = () => { activateEffect(); startIdleCheck() }
 
 onMounted(() => {
   updateSpeechAlign()
@@ -147,367 +106,273 @@ onMounted(() => {
   window.addEventListener('touchmove', handleMove, { passive: false })
   window.addEventListener('touchend', handleEnd)
   window.addEventListener('resize', updateSpeechAlign)
+  startIdleCheck()
 })
-
 onUnmounted(() => {
   window.removeEventListener('mousemove', handleMove)
   window.removeEventListener('mouseup', handleEnd)
   window.removeEventListener('touchmove', handleMove)
   window.removeEventListener('touchend', handleEnd)
   window.removeEventListener('resize', updateSpeechAlign)
-  if (activeTimer) {
-    clearTimeout(activeTimer)
-    activeTimer = null
-  }
-  if (speechTimer) {
-    clearTimeout(speechTimer)
-    speechTimer = null
-  }
+  ;[activeTimer, speechTimer, waveTimer, idleTimer].forEach(t => t && clearTimeout(t))
 })
 </script>
 
 <template>
-  <div 
+  <div
     ref="containerRef"
     class="ai-robot-container w-full h-full cursor-grab touch-none select-none pointer-events-auto will-change-transform"
     :class="{ 'is-hover': isHover, 'is-pressed': isPressed, 'is-active': isActive }"
-    @mousedown="handleStart"
-    @touchstart="handleStart"
-    @mouseenter="handleEnter"
-    @mouseleave="handleLeave"
-    @click="handleActivate"
-    @dragstart.prevent
+    @mousedown="handleStart" @touchstart="handleStart"
+    @mouseenter="handleEnter" @mouseleave="handleLeave"
+    @click="handleActivate" @dragstart.prevent
   >
     <div class="robot-halo"></div>
     <div v-show="showSpeech" :class="['robot-speech', speechAlign === 'left' ? 'speech-left' : 'speech-right']">{{ speechText }}</div>
     <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" class="w-full h-full filter drop-shadow-2xl overflow-visible pointer-events-none">
       <defs>
-        <!-- 金属渐变 -->
-          <linearGradient :id="metalGradientId" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#f0f9ff" />
-          <stop offset="50%" stop-color="#cbe4f7" />
-          <stop offset="100%" stop-color="#93c5fd" />
+        <linearGradient :id="metalGradientId" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#f0f9ff"/><stop offset="50%" stop-color="#cbe4f7"/><stop offset="100%" stop-color="#93c5fd"/>
         </linearGradient>
-        
-        <!-- 深色金属渐变 -->
-          <linearGradient :id="darkMetalGradientId" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#475569" />
-          <stop offset="100%" stop-color="#1e293b" />
+        <linearGradient :id="darkMetalGradientId" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#475569"/><stop offset="100%" stop-color="#1e293b"/>
         </linearGradient>
-
-        <!-- 眼睛发光渐变 -->
         <radialGradient :id="eyeGlowId" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#67e8f9" stop-opacity="1" />
-          <stop offset="80%" stop-color="#06b6d4" stop-opacity="0.8" />
-          <stop offset="100%" stop-color="#06b6d4" stop-opacity="0" />
+          <stop offset="0%" stop-color="#67e8f9" stop-opacity="1"/><stop offset="80%" stop-color="#06b6d4" stop-opacity="0.8"/><stop offset="100%" stop-color="#06b6d4" stop-opacity="0"/>
         </radialGradient>
-
-        <!-- 核心能量渐变 -->
         <radialGradient :id="coreGlowId" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#a855f7" />
-          <stop offset="100%" stop-color="#3b82f6" />
+          <stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#3b82f6"/>
         </radialGradient>
-        <linearGradient :id="orbitGradientId" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.1" />
-          <stop offset="50%" stop-color="#3b82f6" stop-opacity="0.6" />
-          <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.1" />
-        </linearGradient>
       </defs>
 
-      <!-- 悬浮动画组 -->
       <g class="animate-robot-float robot-stage" transform="scale(0.8) translate(40, 40)">
-        <!-- 身体部分 -->
+        <!-- 身体（呼吸感） -->
         <g transform="translate(100, 150)">
           <g class="robot-torso">
-            <!-- 躯干 -->
-            <path d="M 40 20 Q 100 0 160 20 L 170 120 Q 100 140 30 120 Z" :fill="`url(#${metalGradientId})`" stroke="#60a5fa" stroke-width="2" />
-            <!-- 核心能量反应堆 -->
-            <circle cx="100" cy="70" r="25" fill="#1e293b" stroke="#3b82f6" stroke-width="2" />
-            <circle cx="100" cy="70" r="18" :fill="`url(#${coreGlowId})`" class="animate-pulse-slow" />
-            
-            <!-- 手臂连接处 -->
-            <circle cx="20" cy="40" r="15" :fill="`url(#${darkMetalGradientId})`" />
-            <circle cx="180" cy="40" r="15" :fill="`url(#${darkMetalGradientId})`" />
+            <path d="M 40 20 Q 100 0 160 20 L 170 120 Q 100 140 30 120 Z" :fill="`url(#${metalGradientId})`" stroke="#60a5fa" stroke-width="2"/>
+            <circle cx="100" cy="70" r="25" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+            <circle cx="100" cy="70" r="18" :fill="`url(#${coreGlowId})`" class="animate-core-breathe"/>
+            <circle cx="65" cy="42" r="4" fill="#3b82f6" class="animate-chest-light-1"/>
+            <circle cx="135" cy="42" r="4" fill="#3b82f6" class="animate-chest-light-2"/>
+            <circle cx="20" cy="40" r="15" :fill="`url(#${darkMetalGradientId})`"/>
+            <circle cx="180" cy="40" r="15" :fill="`url(#${darkMetalGradientId})`"/>
           </g>
         </g>
 
-        <!-- 头部部分 (包含摇头动画) -->
-        <g class="animate-head-bob" transform-origin="200 140">
+        <!-- 头部（好奇歪头 + 点头） -->
+        <g :class="['animate-head-bob', { 'head-curious': isHover, 'head-nod': isActive }]" transform-origin="200 140">
           <g transform="translate(100, 40)">
-            <!-- 天线 -->
-            <line x1="100" y1="0" x2="100" y2="-30" stroke="#94a3b8" stroke-width="4" />
-            <circle cx="100" cy="-35" r="8" fill="#ef4444" class="animate-ping-slow" />
-            <circle cx="100" cy="-35" r="5" fill="#ef4444" />
-
-            <!-- 头盔主体 -->
-            <rect x="20" y="0" width="160" height="110" rx="45" ry="45" :fill="`url(#${metalGradientId})`" stroke="#60a5fa" stroke-width="2" />
-            
-            <!-- 面部屏幕 -->
-            <rect x="35" y="25" width="130" height="70" rx="30" ry="30" fill="#0f172a" stroke="#334155" stroke-width="2" />
-            
-            <!-- 眼睛 -->
-            <g class="eyes">
-              <!-- 左眼 -->
-              <ellipse cx="75" cy="60" rx="18" ry="22" :fill="`url(#${eyeGlowId})`" class="animate-blink" />
-              <!-- 右眼 -->
-              <ellipse cx="125" cy="60" rx="18" ry="22" :fill="`url(#${eyeGlowId})`" class="animate-blink" />
+            <line x1="100" y1="0" x2="100" y2="-30" stroke="#94a3b8" stroke-width="4"/>
+            <circle cx="100" cy="-35" r="8" fill="#ef4444" class="animate-ping-slow"/>
+            <circle cx="100" cy="-35" r="5" fill="#ef4444"/>
+            <rect x="20" y="0" width="160" height="110" rx="45" ry="45" :fill="`url(#${metalGradientId})`" stroke="#60a5fa" stroke-width="2"/>
+            <rect x="35" y="25" width="130" height="70" rx="30" ry="30" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+            <g :class="['eyes', { 'eyes-excited': isActive }]">
+              <ellipse cx="75" cy="60" rx="18" ry="22" :fill="`url(#${eyeGlowId})`" class="animate-blink"/>
+              <ellipse cx="125" cy="60" rx="18" ry="22" :fill="`url(#${eyeGlowId})`" class="animate-blink"/>
+              <circle cx="80" cy="55" r="4" fill="white" opacity="0.6"/>
+              <circle cx="130" cy="55" r="4" fill="white" opacity="0.6"/>
             </g>
-
-            <!-- 嘴巴/语音波纹 -->
-            <g transform="translate(100, 85)" class="opacity-50">
-              <rect x="-20" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-1" />
-              <rect x="-10" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-2" />
-              <rect x="0" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-3" />
-              <rect x="10" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-2" />
-              <rect x="20" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-1" />
+            <g transform="translate(100, 85)" :class="['mouth-bars', { 'mouth-speaking': showSpeech }]">
+              <rect x="-20" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-1"/>
+              <rect x="-10" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-2"/>
+              <rect x="0" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-3"/>
+              <rect x="10" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-2"/>
+              <rect x="20" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-1"/>
             </g>
           </g>
         </g>
 
         <!-- 左手 -->
         <g transform="translate(120, 190)">
-          <g :class="['robot-arm-left', { 'robot-arm-left-burst': isActive || isPressed }]">
-            <path d="M 0 0 Q -30 40 -10 70" :stroke="`url(#${metalGradientId})`" stroke-width="15" fill="none" stroke-linecap="round" />
-            <circle cx="-10" cy="75" r="12" :fill="`url(#${darkMetalGradientId})`" />
+          <g :class="['robot-arm-left', { 'robot-arm-left-burst': isActive || isPressed, 'robot-arm-left-wave': isWaving }]">
+            <path d="M 0 0 Q -30 40 -10 70" :stroke="`url(#${metalGradientId})`" stroke-width="15" fill="none" stroke-linecap="round"/>
+            <circle cx="-10" cy="75" r="12" :fill="`url(#${darkMetalGradientId})`"/>
+            <circle cx="-14" cy="85" r="5" :fill="`url(#${darkMetalGradientId})`" opacity="0.7"/>
           </g>
         </g>
 
-        <!-- 右手 (挥手动画) -->
+        <!-- 右手 -->
         <g transform="translate(280, 190)">
-          <g :class="['robot-arm-right', { 'robot-arm-right-burst': isActive || isPressed }]">
+          <g :class="['robot-arm-right', { 'robot-arm-right-burst': isActive || isPressed, 'robot-arm-right-wave': isWaving }]">
             <g class="animate-wave-hand" style="transform-origin: 0px 0px">
-              <path d="M 0 0 Q 30 40 10 70" :stroke="`url(#${metalGradientId})`" stroke-width="15" fill="none" stroke-linecap="round" />
-              <circle cx="10" cy="75" r="12" :fill="`url(#${darkMetalGradientId})`" />
+              <path d="M 0 0 Q 30 40 10 70" :stroke="`url(#${metalGradientId})`" stroke-width="15" fill="none" stroke-linecap="round"/>
+              <circle cx="10" cy="75" r="12" :fill="`url(#${darkMetalGradientId})`"/>
+              <circle cx="14" cy="85" r="5" :fill="`url(#${darkMetalGradientId})`" opacity="0.7"/>
             </g>
           </g>
         </g>
       </g>
-      
-      <!-- 底部阴影 -->
-      <ellipse cx="200" cy="350" rx="60" ry="10" fill="#000" opacity="0.2" class="animate-shadow-scale" />
+
+      <ellipse cx="200" cy="350" rx="60" ry="10" fill="#000" opacity="0.2" class="animate-shadow-scale"/>
     </svg>
   </div>
 </template>
 
 <style scoped>
-.ai-robot-container {
-  position: relative;
-  transition: transform 0.2s ease, filter 0.2s ease;
-}
+.ai-robot-container { position: relative; transition: filter 0.2s ease; }
 
 .robot-halo {
-  position: absolute;
-  inset: 16%;
-  border-radius: 9999px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.25) 0%, rgba(59, 130, 246, 0.08) 45%, rgba(59, 130, 246, 0) 75%);
-  opacity: 0;
-  transform: scale(0.88);
-  transition: opacity 0.22s ease, transform 0.22s ease;
-  pointer-events: none;
+  position: absolute; inset: 16%; border-radius: 9999px;
+  background: radial-gradient(circle, rgba(6,182,212,0.25) 0%, rgba(59,130,246,0.08) 45%, rgba(59,130,246,0) 75%);
+  opacity: 0; transform: scale(0.88); transition: opacity 0.25s ease, transform 0.25s ease; pointer-events: none;
 }
 
 .robot-speech {
-  position: absolute;
-  top: 8%;
-  transform: translateY(-100%);
-  padding: 6px 12px;
-  border-radius: 9999px;
-  font-size: 12px;
-  line-height: 1;
-  color: #0f172a;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(59, 130, 246, 0.35);
-  box-shadow: 0 6px 20px rgba(14, 165, 233, 0.2);
-  backdrop-filter: blur(6px);
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 5;
-  animation: speech-pop 0.24s ease;
+  position: absolute; top: 6%; transform: translateY(-100%);
+  padding: 7px 14px; border-radius: 9999px; font-size: 12px; line-height: 1;
+  color: #0f172a; background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(59,130,246,0.35); box-shadow: 0 6px 20px rgba(14,165,233,0.2);
+  backdrop-filter: blur(6px); white-space: nowrap; pointer-events: none; z-index: 5;
+  animation: speech-pop 0.28s cubic-bezier(0.34,1.56,0.64,1);
 }
-
-.speech-right {
-  left: 60%;
-}
-
-.speech-left {
-  right: 60%;
-}
-
+.speech-right { left: 60%; } .speech-left { right: 60%; }
 .robot-speech::after {
-  content: '';
-  position: absolute;
-  bottom: -6px;
-  width: 10px;
-  height: 10px;
-  background: rgba(255, 255, 255, 0.9);
-  border-right: 1px solid rgba(59, 130, 246, 0.35);
-  border-bottom: 1px solid rgba(59, 130, 246, 0.35);
+  content: ''; position: absolute; bottom: -6px; width: 10px; height: 10px;
+  background: rgba(255,255,255,0.92);
+  border-right: 1px solid rgba(59,130,246,0.35); border-bottom: 1px solid rgba(59,130,246,0.35);
   transform: rotate(45deg);
 }
+.speech-right::after { left: 16%; } .speech-left::after { right: 16%; }
 
-.speech-right::after {
-  left: 16%;
-}
+.robot-stage { transform-origin: 200px 220px; }
 
-.speech-left::after {
-  right: 16%;
-}
+/* 呼吸感躯干 */
+.robot-torso { transform-origin: 100px 80px; animation: torso-breathe 4s ease-in-out infinite; }
 
-.robot-stage {
-  transform-origin: 200px 220px;
-}
+/* 手臂 - 待机自然摆动 */
+.robot-arm-left { transform-origin: 20px 20px; animation: arm-sway-left 3.2s ease-in-out infinite; }
+.robot-arm-right { transform-origin: 0px 20px; animation: arm-sway-right 3.2s ease-in-out infinite; }
 
-.robot-torso {
-  transform-origin: 100px 80px;
-  animation: torso-twist 3.4s ease-in-out infinite;
-}
+/* 点击双臂爆发挥舞 */
+.robot-arm-left-burst { animation: arm-wave-burst-left 0.5s cubic-bezier(0.36,1.8,0.4,0.8) 2 !important; }
+.robot-arm-right-burst { animation: arm-wave-burst-right 0.5s cubic-bezier(0.36,1.8,0.4,0.8) 2 !important; }
 
-.robot-arm-left {
-  transform-origin: 20px 20px;
-  animation: arm-sway-left 2.8s ease-in-out infinite;
-}
+/* 主动招手 */
+.robot-arm-right-wave { animation: arm-hello-wave 0.4s ease-in-out 3 !important; }
+.robot-arm-left-wave { animation: arm-hello-tuck 0.6s ease-in-out 1 !important; }
 
-.robot-arm-right {
-  transform-origin: 0px 20px;
-  animation: arm-sway-right 2.8s ease-in-out infinite;
-}
-
-.robot-arm-left-burst {
-  animation: arm-wave-burst-left 0.55s ease-in-out 2 !important;
-}
-
-.robot-arm-right-burst {
-  animation: arm-wave-burst-right 0.55s ease-in-out 2 !important;
-}
-
-.ai-robot-container.is-hover {
-  filter: drop-shadow(0 10px 18px rgba(14, 165, 233, 0.28));
-}
-
-.ai-robot-container.is-hover .robot-halo {
-  opacity: 1;
-  transform: scale(1);
-}
-
-.ai-robot-container.is-pressed {
-  transform: scale(0.96);
-}
-
-.ai-robot-container.is-active .robot-halo {
-  opacity: 1;
-  transform: scale(1.18);
-}
-
-.ai-robot-container.is-hover .robot-torso,
-.ai-robot-container.is-active .robot-torso {
-  animation-duration: 1.6s;
-}
-
+/* Hover / Active */
+.ai-robot-container.is-hover { filter: drop-shadow(0 10px 22px rgba(14,165,233,0.32)); }
+.ai-robot-container.is-hover .robot-halo { opacity: 1; transform: scale(1); }
+.ai-robot-container.is-pressed { transform: scale(0.94); transition: transform 0.08s ease; }
+.ai-robot-container.is-active .robot-halo { opacity: 1; transform: scale(1.22); }
+.ai-robot-container.is-hover .robot-torso { animation-duration: 2s; }
 .ai-robot-container.is-hover .robot-arm-left,
-.ai-robot-container.is-hover .robot-arm-right,
-.ai-robot-container.is-active .robot-arm-left,
-.ai-robot-container.is-active .robot-arm-right {
-  animation-duration: 1.3s;
-}
+.ai-robot-container.is-hover .robot-arm-right { animation-duration: 1.5s; }
 
-.animate-robot-float {
-  animation: robot-float 4s ease-in-out infinite;
-}
+/* 头部动态 class */
+.head-curious { animation: head-curious 0.6s ease forwards !important; }
+.head-nod { animation: head-nod 0.4s ease 2 !important; }
+.eyes-excited ellipse { animation: eye-excited 0.5s ease 2 !important; }
+.mouth-speaking .animate-wave-1,
+.mouth-speaking .animate-wave-2,
+.mouth-speaking .animate-wave-3 { animation-duration: 0.35s !important; }
+.mouth-bars { opacity: 0.5; transition: opacity 0.2s; }
+.mouth-speaking { opacity: 1; }
 
-.animate-head-bob {
-  animation: head-bob 5s ease-in-out infinite;
-}
+/* 循环基础动画 */
+.animate-robot-float { animation: robot-float 4s ease-in-out infinite; }
+.animate-head-bob { animation: head-bob 5s ease-in-out infinite; }
+.animate-blink { animation: blink 3.5s infinite; }
+.animate-ping-slow { animation: ping 3s cubic-bezier(0,0,0.2,1) infinite; }
+.animate-wave-hand { animation: wave-hand 3s ease-in-out infinite; }
+.animate-shadow-scale { animation: shadow-scale 4s ease-in-out infinite; }
+.animate-core-breathe { animation: core-breathe 3s ease-in-out infinite; }
+.animate-chest-light-1 { animation: chest-blink 2s ease-in-out infinite; }
+.animate-chest-light-2 { animation: chest-blink 2s ease-in-out infinite 1s; }
 
-.animate-blink {
-  animation: blink 4s infinite;
-}
-
-.animate-ping-slow {
-  animation: ping 3s cubic-bezier(0, 0, 0.2, 1) infinite;
-}
-
-.animate-pulse-slow {
-  animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.animate-wave-hand {
-  animation: wave-hand 3s ease-in-out infinite;
-}
-
-.animate-shadow-scale {
-  animation: shadow-scale 4s ease-in-out infinite;
-}
-
+/* ===== Keyframes ===== */
 @keyframes robot-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-15px); }
+  0%,100% { transform: translateY(0) scale(0.8); }
+  50% { transform: translateY(-14px) scale(0.8); }
 }
-
-@keyframes torso-twist {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(2deg); }
-  50% { transform: rotate(0deg); }
-  75% { transform: rotate(-2deg); }
+@keyframes torso-breathe {
+  0%,100% { transform: scaleY(1) rotate(0deg); }
+  30% { transform: scaleY(1.015) rotate(1.5deg); }
+  60% { transform: scaleY(0.99) rotate(-1.5deg); }
 }
-
 @keyframes arm-sway-left {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-6deg) translateY(-1px); }
+  0%,100% { transform: rotate(0deg); }
+  40% { transform: rotate(-5deg) translateY(-2px); }
+  70% { transform: rotate(2deg); }
 }
-
 @keyframes arm-sway-right {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(6deg) translateY(-1px); }
+  0%,100% { transform: rotate(0deg); }
+  40% { transform: rotate(5deg) translateY(-2px); }
+  70% { transform: rotate(-2deg); }
 }
-
 @keyframes arm-wave-burst-left {
   0% { transform: rotate(0deg); }
-  25% { transform: rotate(-20deg) translateY(-2px); }
-  50% { transform: rotate(8deg); }
-  75% { transform: rotate(-14deg); }
+  20% { transform: rotate(-25deg) translateY(-6px); }
+  50% { transform: rotate(10deg); }
+  80% { transform: rotate(-15deg); }
   100% { transform: rotate(0deg); }
 }
-
 @keyframes arm-wave-burst-right {
   0% { transform: rotate(0deg); }
-  25% { transform: rotate(20deg) translateY(-2px); }
-  50% { transform: rotate(-8deg); }
-  75% { transform: rotate(14deg); }
+  20% { transform: rotate(25deg) translateY(-6px); }
+  50% { transform: rotate(-10deg); }
+  80% { transform: rotate(15deg); }
   100% { transform: rotate(0deg); }
 }
-
+@keyframes arm-hello-wave {
+  0% { transform: rotate(0deg); }
+  25% { transform: rotate(-35deg) translateY(-10px); }
+  50% { transform: rotate(-15deg) translateY(-6px); }
+  75% { transform: rotate(-30deg) translateY(-8px); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes arm-hello-tuck {
+  0%,100% { transform: rotate(0deg); }
+  50% { transform: rotate(5deg) translateY(3px); }
+}
 @keyframes head-bob {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(2deg); }
-  75% { transform: rotate(-2deg); }
+  0%,100% { transform: rotate(0deg); }
+  25% { transform: rotate(1.8deg); }
+  75% { transform: rotate(-1.8deg); }
 }
-
+@keyframes head-curious {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-6deg) translateY(-2px); }
+}
+@keyframes head-nod {
+  0%,100% { transform: rotate(0deg) translateY(0); }
+  50% { transform: rotate(0deg) translateY(6px); }
+}
 @keyframes blink {
-  0%, 48%, 52%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(0.1); }
+  0%,42%,58%,100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.08); }
 }
-
+@keyframes eye-excited {
+  0%,100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
 @keyframes wave-hand {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-10deg) translateY(-5px); }
+  0%,100% { transform: rotate(0deg); }
+  50% { transform: rotate(-8deg) translateY(-4px); }
 }
-
 @keyframes shadow-scale {
-  0%, 100% { transform: scale(1); opacity: 0.2; }
-  50% { transform: scale(0.8); opacity: 0.1; }
+  0%,100% { transform: scale(1); opacity: 0.2; }
+  50% { transform: scale(0.75); opacity: 0.08; }
 }
-
+@keyframes core-breathe {
+  0%,100% { transform: scale(1); opacity: 0.85; filter: brightness(1); }
+  50% { transform: scale(1.1); opacity: 1; filter: brightness(1.3); }
+}
+@keyframes chest-blink {
+  0%,100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
 @keyframes wave-bar {
-  0%, 100% { height: 4px; transform: translateY(0); }
-  50% { height: 12px; transform: translateY(-4px); }
+  0%,100% { height: 4px; transform: translateY(0); }
+  50% { height: 14px; transform: translateY(-5px); }
 }
-
 @keyframes speech-pop {
-  0% { opacity: 0; transform: translate(-50%, -2px) scale(0.92); }
-  100% { opacity: 1; transform: translate(-50%, -8px) scale(1); }
+  0% { opacity: 0; transform: translateY(4px) scale(0.9); }
+  100% { opacity: 1; transform: translateY(-100%) scale(1); }
 }
-
 .animate-wave-1 { animation: wave-bar 1s ease-in-out infinite; }
-.animate-wave-2 { animation: wave-bar 1s ease-in-out infinite 0.1s; }
-.animate-wave-3 { animation: wave-bar 1s ease-in-out infinite 0.2s; }
+.animate-wave-2 { animation: wave-bar 1s ease-in-out infinite 0.12s; }
+.animate-wave-3 { animation: wave-bar 1s ease-in-out infinite 0.24s; }
 </style>

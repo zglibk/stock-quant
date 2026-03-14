@@ -55,7 +55,7 @@ const equityChartOption = computed(() => {
         return `${p.axisValue}<br/>净值: ¥${p.value.toLocaleString()}<br/>盈亏: ¥${profit} (${pctVal}%)`
       }
     },
-    grid: { top: 30, bottom: 30, left: 70, right: 20 },
+    grid: { top: 30, bottom: 30, left: 70, right: 80 },
     xAxis: { type: 'category', data: dates, axisLabel: { color: '#9ca3af', fontSize: 11 } },
     yAxis: {
       type: 'value',
