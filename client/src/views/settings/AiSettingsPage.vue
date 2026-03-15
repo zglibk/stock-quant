@@ -13,6 +13,7 @@ const testingMap = ref({})
 const models = ref([])
 const selectedParamModel = ref('')
 const ownerFilter = ref('all')
+const editingRef = ref('')  // 正在编辑的模型ref，空=新增模式
 
 const defaults = reactive({
   chatModel: '',
@@ -192,6 +193,40 @@ function removeModel(ref) {
   if (defaults.analysisModel === ref) defaults.analysisModel = ''
   if (defaults.visionModel === ref) defaults.visionModel = ''
   if (selectedParamModel.value === ref) selectedParamModel.value = ownModelOptions.value[0]?.value || ''
+  if (editingRef.value === ref) { editingRef.value = ''; resetModelForm() }
+}
+
+function editModel(m) {
+  editingRef.value = m.modelRef || m.id
+  modelForm.name = m.name
+  modelForm.id = m.id
+  modelForm.providerType = m.providerType
+  modelForm.model = m.model
+  modelForm.baseURL = m.baseURL
+  modelForm.apiKey = ''  // 不回填密钥
+  modelForm.enabled = m.enabled
+  modelForm.isVision = m.isVision
+}
+
+function updateModel() {
+  const ref = editingRef.value
+  const idx = models.value.findIndex(m => (m.modelRef || m.id) === ref)
+  if (idx === -1) return
+  models.value[idx].name = modelForm.name
+  models.value[idx].providerType = modelForm.providerType
+  models.value[idx].model = modelForm.model
+  models.value[idx].baseURL = modelForm.baseURL
+  if (modelForm.apiKey) models.value[idx].apiKey = modelForm.apiKey  // 有填才更新
+  models.value[idx].enabled = modelForm.enabled
+  models.value[idx].isVision = modelForm.isVision
+  editingRef.value = ''
+  resetModelForm()
+  ElMessage.success('模型已更新（请点保存生效）')
+}
+
+function cancelEdit() {
+  editingRef.value = ''
+  resetModelForm()
 }
 
 function isOwnModel(m) {
@@ -336,266 +371,181 @@ onMounted(loadSettings)
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto space-y-4">
-    <el-card v-loading="loading" class="sq-list-card bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-      <template #header>
-        <div class="sq-list-title text-lg font-bold text-gray-900 dark:text-gray-100">添加模型</div>
-      </template>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <el-input v-model="modelForm.name" placeholder="模型显示名称" class="dark:text-gray-100" />
-        <el-input v-model="modelForm.id" placeholder="模型别名（可选）" class="dark:text-gray-100" />
-        <el-select v-model="modelForm.providerType" placeholder="Provider 类型" class="dark:text-gray-100">
-          <el-option label="OpenAI 兼容" value="openai" />
-          <el-option label="Anthropic" value="anthropic" />
-        </el-select>
-        <el-input v-model="modelForm.model" placeholder="模型ID，例如 Qwen/Qwen3.5-397B-A17B" class="dark:text-gray-100" />
-        <el-input v-model="modelForm.baseURL" placeholder="Base URL，例如 https://api.siliconflow.cn/v1" class="dark:text-gray-100" />
-        <el-input v-model="modelForm.apiKey" show-password placeholder="API Key" class="dark:text-gray-100" />
-      </div>
-      <div class="flex items-center gap-4 mt-3">
-        <el-switch v-model="modelForm.enabled" active-text="启用" class="dark:text-gray-100" />
-        <el-switch v-model="modelForm.isVision" active-text="支持视觉" class="dark:text-gray-100" />
-        <el-button :loading="testingMap.new" @click="testNewModel" class="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">连通性测试</el-button>
-        <el-button type="primary" @click="addModel">添加模型</el-button>
-      </div>
-    </el-card>
+  <div v-loading="loading">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-bold text-gray-800 dark:text-gray-100">模型设置</h2>
+      <el-button type="primary" :loading="saving" @click="saveSettings">💾 保存所有设置</el-button>
+    </div>
 
-    <el-card class="sq-list-card bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-      <template #header>
-        <div class="flex items-center justify-between gap-3">
-          <div class="sq-list-title text-lg font-bold text-gray-900 dark:text-gray-100">模型列表</div>
-          <div class="flex items-center gap-2">
-            <el-select v-if="isAdmin" v-model="ownerFilter" style="width: 220px" placeholder="按创建人筛选" class="dark:text-gray-100">
-              <el-option label="全部创建人" value="all" />
-              <el-option v-for="o in ownerOptions" :key="`owner-${o.value}`" :label="o.label" :value="o.value" />
-            </el-select>
-            <el-button :loading="batchTesting" @click="testVisibleModels" class="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">批量连通测试</el-button>
-          </div>
-        </div>
-      </template>
-      <div class="space-y-2">
-        <div v-for="m in filteredModels" :key="m.modelRef || m.id" class="border border-slate-200 dark:border-gray-700 rounded-lg p-3 flex items-center justify-between gap-2 bg-slate-50/40 dark:bg-gray-900/40 text-gray-900 dark:text-gray-100">
-          <div class="text-sm">
-            <div class="font-semibold text-gray-900 dark:text-gray-100">
-              {{ m.name }} <span class="text-gray-500 dark:text-gray-400">({{ m.id }})</span>
-              <span v-if="m.ownerName" class="text-xs text-blue-500 dark:text-blue-400 ml-2">创建人: {{ m.ownerName }}</span>
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-4">
+      <!-- ========== 左栏: 模型列表 (占3列) ========== -->
+      <div class="xl:col-span-3 space-y-4">
+        <!-- 模型列表 -->
+        <div class="set-card">
+          <div class="set-card-header">
+            <span>模型列表</span>
+            <div class="flex items-center gap-2 ml-auto">
+              <el-select v-if="isAdmin" v-model="ownerFilter" size="small" style="width: 150px" placeholder="按创建人筛选">
+                <el-option label="全部创建人" value="all" />
+                <el-option v-for="o in ownerOptions" :key="`owner-${o.value}`" :label="o.label" :value="o.value" />
+              </el-select>
+              <el-button size="small" :loading="batchTesting" @click="testVisibleModels">批量测试</el-button>
             </div>
-            <div class="text-gray-600 dark:text-gray-400">{{ m.model }}</div>
-            <div class="text-gray-500 dark:text-gray-400">{{ m.baseURL }}</div>
-            <div class="text-gray-500 dark:text-gray-400">Key: {{ m.apiKeyPreview || (m.hasApiKey ? '已配置' : '未配置') }}</div>
           </div>
-          <div class="flex items-center gap-2">
-            <el-switch v-model="m.enabled" :disabled="!isOwnModel(m)" />
-            <el-button :loading="testingMap[m.modelRef || m.id]" @click="testModel(m)" class="dark:bg-gray-700 dark:text-gray-100 dark:border-gray-600">测试</el-button>
-            <el-button v-if="isOwnModel(m)" type="danger" plain @click="removeModel(m.modelRef || m.id)">删除</el-button>
-          </div>
-        </div>
-      </div>
-    </el-card>
-
-    <el-card class="sq-list-card bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-      <template #header>
-        <div class="sq-list-title text-lg font-bold text-gray-900 dark:text-gray-100">默认模型</div>
-      </template>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <el-select v-model="defaults.chatModel" placeholder="聊天默认模型" class="dark:text-gray-100">
-          <el-option v-for="m in allEnabledModelOptions" :key="`chat-${m.value}`" :label="m.label" :value="m.value" />
-        </el-select>
-        <el-select v-model="defaults.analysisModel" placeholder="分析默认模型" class="dark:text-gray-100">
-          <el-option v-for="m in allEnabledModelOptions" :key="`analysis-${m.value}`" :label="m.label" :value="m.value" />
-        </el-select>
-        <el-select v-model="defaults.visionModel" placeholder="视觉默认模型" class="dark:text-gray-100">
-          <el-option v-for="m in allEnabledModelOptions" :key="`vision-${m.value}`" :label="m.label" :value="m.value" />
-        </el-select>
-      </div>
-    </el-card>
-
-    <el-card class="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100">
-      <template #header>
-        <div class="sq-section-title">按模型参数调节</div>
-      </template>
-      <div class="mb-3">
-        <el-select v-model="selectedParamModel" placeholder="选择要调参的模型" class="dark:text-gray-100">
-          <el-option v-for="m in ownModelOptions" :key="`param-${m.value}`" :label="m.label" :value="m.value" />
-        </el-select>
-      </div>
-      <div class="space-y-4" v-if="selectedModelEntity">
-        <div>
-          <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-            <span>系统提示词 (System Prompt)</span>
-            <el-tooltip placement="top" effect="dark">
-              <template #content>
-                <div class="max-w-xs space-y-2">
-                  <div class="font-bold text-base">系统提示词 (System Prompt)</div>
-                  <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.systemPrompt.purpose }}</div>
-                  <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.systemPrompt.valueGuide }}</div>
-                  <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.systemPrompt.tech }}</div>
+          <div class="p-3 space-y-2 max-h-[520px] overflow-y-auto">
+            <div v-for="m in filteredModels" :key="m.modelRef || m.id"
+              class="p-3 rounded-lg border transition-all cursor-pointer"
+              :class="(selectedParamModel === (m.modelRef || m.id))
+                ? 'border-blue-400 dark:border-blue-500 bg-blue-50/50 dark:bg-blue-500/5'
+                : 'border-gray-100 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-600'"
+              @click="selectedParamModel = m.modelRef || m.id"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 text-sm">
+                    <span class="font-bold text-gray-800 dark:text-gray-100 truncate">{{ m.name }}</span>
+                    <el-tag v-if="m.isVision" size="small" type="success" effect="plain" class="!text-[10px]">视觉</el-tag>
+                    <el-tag v-if="!m.enabled" size="small" type="info" effect="plain" class="!text-[10px]">已禁用</el-tag>
+                    <span v-if="m.ownerName" class="text-[11px] text-gray-400">{{ m.ownerName }}</span>
+                  </div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate font-mono">{{ m.model }}</div>
+                  <div class="text-[11px] text-gray-400 dark:text-gray-600 truncate">{{ m.baseURL }}</div>
+                  <div class="text-[11px] text-gray-400 mt-0.5">Key: {{ m.apiKeyPreview || (m.hasApiKey ? '✓ 已配置' : '✗ 未配置') }}</div>
                 </div>
-              </template>
-              <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-            </el-tooltip>
+                <div class="flex items-center gap-1 shrink-0">
+                  <el-switch v-model="m.enabled" :disabled="!isOwnModel(m)" size="small" />
+                  <el-button :loading="testingMap[m.modelRef || m.id]" size="small" text @click.stop="testModel(m)">测试</el-button>
+                  <el-button v-if="isOwnModel(m)" size="small" text type="primary" @click.stop="editModel(m)">编辑</el-button>
+                  <el-button v-if="isOwnModel(m)" size="small" text type="danger" @click.stop="removeModel(m.modelRef || m.id)">删除</el-button>
+                </div>
+              </div>
+            </div>
+            <div v-if="!filteredModels.length" class="text-center py-8 text-gray-400 text-sm">暂无模型，请在右侧添加</div>
           </div>
-          <el-input v-model="paramEditor.systemPrompt" type="textarea" :rows="3" @input="syncEditorToModel" class="dark:text-gray-100" />
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>最大生成长度 (Max Tokens): {{ paramEditor.maxTokens }}</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">最大生成长度 (Max Tokens)</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.maxTokens.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.maxTokens.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.maxTokens.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </div>
-            <el-slider v-model="paramEditor.maxTokens" :min="256" :max="32768" :step="256" @change="syncEditorToModel" />
+
+        <!-- 参数调节 -->
+        <div class="set-card">
+          <div class="set-card-header">
+            <span>参数调节</span>
+            <el-select v-model="selectedParamModel" size="small" style="width: 200px" placeholder="选择模型" class="ml-auto">
+              <el-option v-for="m in ownModelOptions" :key="`param-${m.value}`" :label="m.label" :value="m.value" />
+            </el-select>
           </div>
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>启用思维链 (Enable Thinking)</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">启用思维链 (Enable Thinking)</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.enableThinking.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.enableThinking.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.enableThinking.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
+          <div class="p-4" v-if="selectedModelEntity">
+            <div class="mb-4">
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1 flex items-center gap-1">
+                系统提示词
+                <el-tooltip placement="top" effect="dark"><template #content><div class="max-w-xs"><div class="font-bold mb-1">System Prompt</div><div>{{ paramTooltips.systemPrompt.purpose }}</div></div></template><el-icon class="cursor-help text-gray-400 hover:text-blue-400" :size="12"><QuestionFilled /></el-icon></el-tooltip>
+              </div>
+              <el-input v-model="paramEditor.systemPrompt" type="textarea" :rows="2" @input="syncEditorToModel" />
             </div>
-            <el-switch v-model="paramEditor.enableThinking" @change="syncEditorToModel" />
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+              <div v-for="param in [
+                { key: 'maxTokens', label: 'Max Tokens', min: 256, max: 32768, step: 256 },
+                { key: 'temperature', label: 'Temperature', min: 0, max: 2, step: 0.01 },
+                { key: 'topP', label: 'Top-P', min: 0, max: 1, step: 0.01 },
+                { key: 'topK', label: 'Top-K', min: 0, max: 200, step: 1 },
+                { key: 'minP', label: 'Min-P', min: 0, max: 1, step: 0.01 },
+                { key: 'presencePenalty', label: 'Presence Penalty', min: -2, max: 2, step: 0.01 },
+                { key: 'frequencyPenalty', label: 'Frequency Penalty', min: -2, max: 2, step: 0.01 },
+                { key: 'repetitionPenalty', label: 'Repetition Penalty', min: 0, max: 2, step: 0.01 },
+              ]" :key="param.key">
+                <div class="flex items-center justify-between text-xs text-gray-600 dark:text-gray-400 mb-1">
+                  <span class="flex items-center gap-1">
+                    {{ param.label }}
+                    <el-tooltip v-if="paramTooltips[param.key]" placement="top" effect="dark"><template #content><div class="max-w-xs"><div class="font-bold mb-1">{{ param.label }}</div><div>{{ paramTooltips[param.key].purpose }}</div><div class="mt-1 text-xs text-gray-400">{{ paramTooltips[param.key].valueGuide }}</div></div></template><el-icon class="cursor-help text-gray-400 hover:text-blue-400" :size="12"><QuestionFilled /></el-icon></el-tooltip>
+                  </span>
+                  <span class="font-mono text-blue-500">{{ paramEditor[param.key] }}</span>
+                </div>
+                <el-slider v-model="paramEditor[param.key]" :min="param.min" :max="param.max" :step="param.step" @change="syncEditorToModel" />
+              </div>
+            </div>
+            <div class="mt-3 flex items-center gap-2">
+              <span class="text-xs text-gray-500">启用思维链</span>
+              <el-switch v-model="paramEditor.enableThinking" @change="syncEditorToModel" size="small" />
+            </div>
           </div>
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>随机性 (Temperature): {{ paramEditor.temperature }}</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">随机性 (Temperature)</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.temperature.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.temperature.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.temperature.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </div>
-            <el-slider v-model="paramEditor.temperature" :min="0" :max="2" :step="0.01" @change="syncEditorToModel" />
+          <div v-else class="p-8 text-center text-gray-400 text-sm">请在模型列表中选择一个模型进行调参</div>
+        </div>
+      </div>
+
+      <!-- ========== 右栏: 添加模型 + 默认设置 (占2列) ========== -->
+      <div class="xl:col-span-2 space-y-4">
+        <!-- 添加/编辑模型 -->
+        <div class="set-card">
+          <div class="set-card-header">
+            <span>{{ editingRef ? '编辑模型' : '添加模型' }}</span>
+            <el-button v-if="editingRef" size="small" text class="ml-auto" @click="cancelEdit">取消编辑</el-button>
           </div>
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>核采样 (Top-P): {{ paramEditor.topP }}</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">核采样 (Top-P)</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.topP.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.topP.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.topP.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
+          <div class="p-4 space-y-3">
+            <el-input v-model="modelForm.name" placeholder="模型显示名称" />
+            <el-input v-if="!editingRef" v-model="modelForm.id" placeholder="模型别名（可选）" />
+            <el-select v-model="modelForm.providerType" placeholder="Provider 类型" class="w-full">
+              <el-option label="OpenAI 兼容" value="openai" />
+              <el-option label="Anthropic" value="anthropic" />
+            </el-select>
+            <el-input v-model="modelForm.model" placeholder="模型ID，如 Qwen/Qwen3.5-397B-A17B" />
+            <el-input v-model="modelForm.baseURL" placeholder="Base URL" />
+            <el-input v-model="modelForm.apiKey" show-password :placeholder="editingRef ? 'API Key（不填则保持原值）' : 'API Key'" />
+            <div class="flex items-center gap-4">
+              <el-switch v-model="modelForm.enabled" active-text="启用" />
+              <el-switch v-model="modelForm.isVision" active-text="视觉" />
             </div>
-            <el-slider v-model="paramEditor.topP" :min="0" :max="1" :step="0.01" @change="syncEditorToModel" />
+            <div class="flex gap-2">
+              <el-button v-if="editingRef" type="primary" @click="updateModel" class="flex-1">更新模型</el-button>
+              <el-button v-else type="primary" @click="addModel" class="flex-1">添加模型</el-button>
+              <el-button :loading="testingMap.new" @click="testNewModel">连通测试</el-button>
+            </div>
           </div>
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>Top-K 采样: {{ paramEditor.topK }}</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">Top-K 采样</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.topK.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.topK.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.topK.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
+        </div>
+
+        <!-- 默认模型 -->
+        <div class="set-card">
+          <div class="set-card-header"><span>默认模型</span></div>
+          <div class="p-4 space-y-3">
+            <div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">聊天/问答</div>
+              <el-select v-model="defaults.chatModel" placeholder="选择默认模型" class="w-full">
+                <el-option v-for="m in allEnabledModelOptions" :key="`chat-${m.value}`" :label="m.label" :value="m.value" />
+              </el-select>
             </div>
-            <el-slider v-model="paramEditor.topK" :min="0" :max="200" :step="1" @change="syncEditorToModel" />
-          </div>
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>Min-P 截断: {{ paramEditor.minP }}</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">Min-P 截断</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.minP.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.minP.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.minP.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
+            <div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">个股分析</div>
+              <el-select v-model="defaults.analysisModel" placeholder="选择默认模型" class="w-full">
+                <el-option v-for="m in allEnabledModelOptions" :key="`analysis-${m.value}`" :label="m.label" :value="m.value" />
+              </el-select>
             </div>
-            <el-slider v-model="paramEditor.minP" :min="0" :max="1" :step="0.01" @change="syncEditorToModel" />
-          </div>
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>存在惩罚 (Presence Penalty): {{ paramEditor.presencePenalty }}</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">存在惩罚 (Presence Penalty)</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.presencePenalty.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.presencePenalty.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.presencePenalty.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
+            <div>
+              <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">图片识别</div>
+              <el-select v-model="defaults.visionModel" placeholder="选择默认模型" class="w-full">
+                <el-option v-for="m in allEnabledModelOptions" :key="`vision-${m.value}`" :label="m.label" :value="m.value" />
+              </el-select>
             </div>
-            <el-slider v-model="paramEditor.presencePenalty" :min="-2" :max="2" :step="0.01" @change="syncEditorToModel" />
-          </div>
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>频率惩罚 (Frequency Penalty): {{ paramEditor.frequencyPenalty }}</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">频率惩罚 (Frequency Penalty)</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.frequencyPenalty.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.frequencyPenalty.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.frequencyPenalty.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </div>
-            <el-slider v-model="paramEditor.frequencyPenalty" :min="-2" :max="2" :step="0.01" @change="syncEditorToModel" />
-          </div>
-          <div>
-            <div class="mb-1 flex items-center gap-1 text-gray-700 dark:text-gray-300">
-              <span>重复惩罚 (Repetition Penalty): {{ paramEditor.repetitionPenalty }}</span>
-              <el-tooltip placement="top" effect="dark">
-                <template #content>
-                  <div class="max-w-xs space-y-2">
-                    <div class="font-bold text-base">重复惩罚 (Repetition Penalty)</div>
-                    <div><span class="font-semibold text-blue-300">控制目的：</span>{{ paramTooltips.repetitionPenalty.purpose }}</div>
-                    <div><span class="font-semibold text-green-300">数值说明：</span>{{ paramTooltips.repetitionPenalty.valueGuide }}</div>
-                    <div class="text-xs text-gray-400 border-t border-gray-600 pt-2 bg-gray-800/50 p-2 rounded">{{ paramTooltips.repetitionPenalty.tech }}</div>
-                  </div>
-                </template>
-                <el-icon class="cursor-help text-gray-400 hover:text-blue-400"><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </div>
-            <el-slider v-model="paramEditor.repetitionPenalty" :min="0" :max="2" :step="0.01" @change="syncEditorToModel" />
           </div>
         </div>
       </div>
-      <div class="mt-6">
-        <el-button type="primary" :loading="saving" @click="saveSettings">保存 AI 设置</el-button>
-      </div>
-    </el-card>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.set-card {
+  background: white;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.set-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 1px solid #f5f5f5;
+}
+:root.dark .set-card, html.dark .set-card { background: #111827; border-color: #1f2937; }
+:root.dark .set-card-header, html.dark .set-card-header { color: #e5e7eb; border-bottom-color: #1f2937; }
+</style>

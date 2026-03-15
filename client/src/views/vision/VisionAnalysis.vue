@@ -48,8 +48,26 @@ const structuredData = computed(() => {
 })
 
 const renderedAnalysis = computed(() => {
-  if (structuredData.value?.analysis) return md.render(structuredData.value.analysis)
+  const text = structuredData.value?.analysis || ''
+  if (text && text.length > 30) return md.render(text)
   return ''
+})
+
+// 判断 analysis 是否有实质内容（不是"见下文"之类的占位）
+const hasRealAnalysis = computed(() => {
+  const text = structuredData.value?.analysis || ''
+  return text.length > 30 && !text.includes('见下文') && !text.includes('详见') && !text.includes('如下')
+})
+
+// 当 structuredData 解析成功但 analysis 太短时，提取 JSON 之外的纯文本部分作为降级
+const fallbackText = computed(() => {
+  if (!result.value || !structuredData.value) return ''
+  // 移除 JSON 代码块，保留前后的纯文本
+  const cleaned = result.value
+    .replace(/```json[\s\S]*?```/g, '')
+    .replace(/\{[\s\S]*\}/g, '')
+    .trim()
+  return cleaned.length > 20 ? cleaned : ''
 })
 
 // 格式化已用时间
@@ -498,15 +516,15 @@ onUnmounted(stopElapsedTimer)
               <span class="mr-2">📝</span> 深度分析
             </h4>
             <div class="bg-gray-50 dark:bg-gray-800/30 rounded-xl p-5 border border-gray-200 dark:border-gray-700/50">
-              <div v-html="renderedAnalysis" class="prose dark:prose-invert prose-sm max-w-none text-gray-700 dark:text-gray-200 leading-7"></div>
+              <div v-if="hasRealAnalysis" v-html="renderedAnalysis" class="vision-md"></div>
+              <div v-else-if="fallbackText" v-html="md.render(fallbackText)" class="vision-md"></div>
+              <div v-else v-html="md.render(result || '')" class="vision-md"></div>
             </div>
           </div>
         </div>
 
-        <!-- 降级展示: 纯文本结果 (流传输中或解析失败) -->
-        <div v-else-if="result" class="prose dark:prose-invert prose-sm max-w-none whitespace-pre-wrap text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-          {{ result }}
-        </div>
+        <!-- 降级展示: JSON解析失败时直接渲染全文 Markdown -->
+        <div v-else-if="result" v-html="md.render(result)" class="vision-md p-1"></div>
 
         <!-- 空状态 -->
         <div v-else class="flex flex-col items-center justify-center h-64 sq-subtle-text">
@@ -516,6 +534,235 @@ onUnmounted(stopElapsedTimer)
         </div>
       </el-card>
     </div>
-    </div><!-- close v-else -->
   </div>
 </template>
+
+<style scoped>
+/* Vision 分析结果 Markdown 排版 - 增强版 */
+.vision-md {
+  font-size: 14px;
+  line-height: 1.9;
+  color: #4b5563;
+  word-break: break-word;
+  letter-spacing: 0.01em;
+}
+
+/* ── 标题体系 ── */
+.vision-md :deep(h1) {
+  font-size: 1.25em;
+  font-weight: 800;
+  margin: 1.6em 0 0.6em;
+  padding: 8px 0 8px 14px;
+  border-left: 4px solid #14b8a6;
+  border-bottom: none;
+  background: linear-gradient(90deg, rgba(20,184,166,0.06) 0%, transparent 60%);
+  border-radius: 0 6px 6px 0;
+  color: #1e293b;
+}
+.vision-md :deep(h2) {
+  font-size: 1.1em;
+  font-weight: 700;
+  margin: 1.5em 0 0.5em;
+  padding: 6px 0 6px 12px;
+  border-left: 3px solid #3b82f6;
+  border-bottom: none;
+  background: linear-gradient(90deg, rgba(59,130,246,0.05) 0%, transparent 50%);
+  border-radius: 0 4px 4px 0;
+  color: #1e293b;
+}
+.vision-md :deep(h3) {
+  font-size: 1em;
+  font-weight: 700;
+  margin: 1.2em 0 0.4em;
+  padding: 0;
+  border: none;
+  color: #334155;
+  position: relative;
+  padding-left: 10px;
+}
+.vision-md :deep(h3)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: #f59e0b;
+  border-radius: 2px;
+}
+.vision-md :deep(h4) {
+  font-size: 0.95em;
+  font-weight: 600;
+  margin: 1em 0 0.3em;
+  padding: 0;
+  border: none;
+  color: #6366f1;
+}
+
+/* ── 段落与文本 ── */
+.vision-md :deep(p) {
+  margin: 0.55em 0;
+}
+.vision-md :deep(strong) {
+  font-weight: 700;
+  color: #0f172a;
+  background: linear-gradient(180deg, transparent 60%, rgba(251,191,36,0.18) 60%);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* ── 列表 ── */
+.vision-md :deep(ul),
+.vision-md :deep(ol) {
+  padding-left: 1.4em;
+  margin: 0.5em 0;
+}
+.vision-md :deep(li) {
+  margin: 0.35em 0;
+  padding-left: 4px;
+}
+.vision-md :deep(ul) { list-style: none; }
+.vision-md :deep(ul > li)::before {
+  content: '▸';
+  color: #14b8a6;
+  font-weight: 700;
+  margin-right: 6px;
+  margin-left: -1.2em;
+  display: inline-block;
+  width: 1em;
+}
+.vision-md :deep(ol) { list-style: decimal; }
+.vision-md :deep(li > ul),
+.vision-md :deep(li > ol) { margin: 0.15em 0; }
+/* 嵌套列表用圆点 */
+.vision-md :deep(li > ul > li)::before {
+  content: '•';
+  color: #94a3b8;
+}
+
+/* ── 代码 ── */
+.vision-md :deep(pre) {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin: 1em 0;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.vision-md :deep(code) {
+  font-family: 'JetBrains Mono','Menlo','Consolas',monospace;
+  font-size: 0.87em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #e11d48;
+}
+.vision-md :deep(pre code) {
+  padding: 0;
+  background: none;
+  color: inherit;
+}
+
+/* ── 分隔线 ── */
+.vision-md :deep(hr) {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(148,163,184,0.3), transparent);
+  margin: 1.5em 0;
+}
+
+/* ── 引用 ── */
+.vision-md :deep(blockquote) {
+  border-left: 3px solid #8b5cf6;
+  padding: 8px 14px;
+  margin: 1em 0;
+  background: linear-gradient(90deg, rgba(139,92,246,0.04), transparent);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  color: #64748b;
+}
+
+/* ── 表格 ── */
+.vision-md :deep(table) {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.vision-md :deep(th) {
+  background: linear-gradient(180deg, #f8fafc, #f1f5f9);
+  font-weight: 600;
+  padding: 8px 12px;
+  border-bottom: 2px solid #e2e8f0;
+  color: #334155;
+  text-align: left;
+}
+.vision-md :deep(td) {
+  padding: 7px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: left;
+}
+.vision-md :deep(tr:last-child td) { border-bottom: none; }
+.vision-md :deep(tr:hover td) { background: rgba(59,130,246,0.03); }
+
+/* ══════ 暗色模式 ══════ */
+:root.dark .vision-md,
+html.dark .vision-md { color: #c9d1d9; }
+
+:root.dark .vision-md :deep(h1),
+html.dark .vision-md :deep(h1) {
+  color: #e2e8f0;
+  background: linear-gradient(90deg, rgba(20,184,166,0.1) 0%, transparent 60%);
+}
+:root.dark .vision-md :deep(h2),
+html.dark .vision-md :deep(h2) {
+  color: #e2e8f0;
+  background: linear-gradient(90deg, rgba(59,130,246,0.08) 0%, transparent 50%);
+}
+:root.dark .vision-md :deep(h3),
+html.dark .vision-md :deep(h3) { color: #cbd5e1; }
+:root.dark .vision-md :deep(h4),
+html.dark .vision-md :deep(h4) { color: #a5b4fc; }
+
+:root.dark .vision-md :deep(strong),
+html.dark .vision-md :deep(strong) {
+  color: #f1f5f9;
+  background: linear-gradient(180deg, transparent 60%, rgba(251,191,36,0.12) 60%);
+}
+:root.dark .vision-md :deep(ul > li)::before { color: #2dd4bf; }
+:root.dark .vision-md :deep(pre),
+html.dark .vision-md :deep(pre) {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.06);
+}
+:root.dark .vision-md :deep(code),
+html.dark .vision-md :deep(code) {
+  background: rgba(255,255,255,0.07);
+  color: #fb923c;
+}
+:root.dark .vision-md :deep(blockquote),
+html.dark .vision-md :deep(blockquote) {
+  background: linear-gradient(90deg, rgba(139,92,246,0.08), transparent);
+  color: #94a3b8;
+}
+:root.dark .vision-md :deep(table),
+html.dark .vision-md :deep(table) { border-color: rgba(255,255,255,0.08); }
+:root.dark .vision-md :deep(th),
+html.dark .vision-md :deep(th) {
+  background: rgba(255,255,255,0.04);
+  border-bottom-color: rgba(255,255,255,0.08);
+  color: #e2e8f0;
+}
+:root.dark .vision-md :deep(td),
+html.dark .vision-md :deep(td) { border-bottom-color: rgba(255,255,255,0.04); }
+:root.dark .vision-md :deep(tr:hover td),
+html.dark .vision-md :deep(tr:hover td) { background: rgba(255,255,255,0.02); }
+:root.dark .vision-md :deep(hr),
+html.dark .vision-md :deep(hr) { background: linear-gradient(90deg, transparent, rgba(148,163,184,0.15), transparent); }
+</style>

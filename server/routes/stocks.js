@@ -6,6 +6,7 @@ const { Stock, DailyKline, Indicator } = require('../models/Market');
 router.get('/', auth, async (req, res) => {
   try {
     const { keyword, industry, page = 1, limit = 20 } = req.query;
+    const safeLimit = Math.min(Number(limit) || 20, 6000); // 上限 6000
     const query = { isActive: true };
     if (keyword) {
       query.$or = [
@@ -18,10 +19,11 @@ router.get('/', auth, async (req, res) => {
     const total = await Stock.countDocuments(query);
     const stocks = await Stock.find(query)
       .sort({ code: 1 })
-      .skip((page - 1) * limit)
-      .limit(Number(limit));
+      .skip((Number(page) - 1) * safeLimit)
+      .limit(safeLimit)
+      .lean(); // lean() 返回纯 JS 对象，大量数据时快很多
 
-    res.json({ success: true, data: { stocks, total, page: Number(page), limit: Number(limit) } });
+    res.json({ success: true, data: { stocks, total, page: Number(page), limit: safeLimit } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

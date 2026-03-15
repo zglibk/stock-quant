@@ -96,6 +96,21 @@ async function start() {
     if (process.env.NODE_ENV !== 'test') {
       require('./jobs/scheduler').start();
       logger.info('✅ 定时任务已启动');
+
+      // 首次启动: 检查 Stock 表是否为空，自动拉取股票列表
+      const { Stock } = require('./models/Market');
+      const count = await Stock.countDocuments();
+      if (count === 0) {
+        logger.info('📋 Stock 表为空，自动拉取 A 股列表...');
+        const dataFetcher = require('./services/dataFetcher');
+        dataFetcher.syncStockList().then(r => {
+          logger.info(`📋 股票列表初始化完成: ${r.updated} 只`);
+        }).catch(err => {
+          logger.error('📋 股票列表初始化失败:', err.message);
+        });
+      } else {
+        logger.info(`📋 Stock 表已有 ${count} 条记录`);
+      }
     }
 
     server.listen(PORT, () => {

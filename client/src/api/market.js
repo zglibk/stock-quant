@@ -15,6 +15,9 @@ export default {
   getRealtime: (codes) => request.get(`/market/realtime/${codes.join(',')}`),
   getOverview: () => request.get('/market/overview'),
   syncData: (body) => request.post('/market/sync', body),
+  syncStockList: () => request.post('/market/sync-stock-list', {}, { timeout: 10000 }),
+  getStockListStatus: () => request.get('/market/sync-stock-list/status'),
   getSyncStatus: () => request.get('/market/sync/status'),
-  calcIndicators: (codes) => request.post('/market/calc-indicators', { codes }),
+  calcIndicators: (codes) => request.post('/market/calc-indicators', { codes }, { timeout: 10000 }),
+  getCalcStatus: () => request.get('/market/calc-indicators/status'),
 }

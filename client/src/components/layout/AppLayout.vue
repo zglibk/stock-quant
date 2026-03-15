@@ -55,42 +55,49 @@ function handleLogout() {
   <el-container class="h-screen bg-white dark:bg-gray-950 transition-colors duration-300">
     <!-- PC 端侧边栏 -->
     <el-aside 
-      :width="isCollapsed ? '64px' : '220px'" 
-      class="hidden md:flex flex-col border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 transition-all duration-300"
+      :width="isCollapsed ? '64px' : '200px'" 
+      class="hidden md:flex flex-col border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 transition-all duration-300"
     >
-      <div class="h-16 flex items-center justify-center border-b border-gray-200 dark:border-gray-800 shrink-0">
-        <span v-if="!isCollapsed" class="text-lg font-bold bg-gradient-to-r from-blue-500 to-teal-400 bg-clip-text text-transparent">
+      <div class="h-14 flex items-center justify-center border-b border-gray-100 dark:border-gray-800 shrink-0">
+        <span v-if="!isCollapsed" class="text-[15px] font-bold bg-gradient-to-r from-blue-500 to-teal-400 bg-clip-text text-transparent tracking-wide">
           量化分析系统
         </span>
         <span v-else class="text-xl">📊</span>
       </div>
       
-      <el-scrollbar>
+      <el-scrollbar class="flex-1">
+        <!-- 功能菜单 -->
+        <div v-if="!isCollapsed" class="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">功能</div>
         <el-menu
           :default-active="route.path"
           :collapse="isCollapsed"
           router
-          :background-color="menuBgColor"
+          :background-color="'transparent'"
           :text-color="menuTextColor"
           :active-text-color="menuActiveTextColor"
-          class="border-none !bg-transparent"
+          class="border-none sidebar-menu"
         >
           <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
             <el-icon><component :is="item.icon" /></el-icon>
             <template #title>{{ item.label }}</template>
           </el-menu-item>
+        </el-menu>
 
-          <el-sub-menu index="/system-settings">
-            <template #title>
-              <el-icon><Setting /></el-icon>
-              <span>系统设置</span>
-            </template>
-            <el-menu-item v-for="item in systemMenuItems" :key="item.path" :index="item.path">
-              <el-icon><component :is="item.icon" /></el-icon>
-              <template #title>{{ item.label }}</template>
-            </el-menu-item>
-          </el-sub-menu>
-
+        <!-- 系统菜单 -->
+        <div v-if="!isCollapsed" class="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-600">系统</div>
+        <el-menu
+          :default-active="route.path"
+          :collapse="isCollapsed"
+          router
+          :background-color="'transparent'"
+          :text-color="menuTextColor"
+          :active-text-color="menuActiveTextColor"
+          class="border-none sidebar-menu"
+        >
+          <el-menu-item v-for="item in systemMenuItems" :key="item.path" :index="item.path">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <template #title>{{ item.label }}</template>
+          </el-menu-item>
           <el-menu-item v-if="userStore.user?.role === 'admin'" index="/admin">
             <el-icon><Setting /></el-icon>
             <template #title>系统管理</template>
@@ -148,13 +155,13 @@ function handleLogout() {
     <!-- 主内容区 -->
     <el-container class="h-full flex flex-col overflow-hidden">
       <!-- 顶栏 -->
-      <el-header class="h-16 flex items-center justify-between border-b border-gray-200 dark:border-gray-800 px-4 bg-white dark:bg-gray-900 shrink-0">
+      <el-header class="h-14 flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-4 bg-white dark:bg-gray-900 shrink-0">
         <div class="flex items-center">
           <button 
             @click="toggleSidebar"
             class="p-2 mr-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 transition-colors"
           >
-            <el-icon size="20"><Fold v-if="!isCollapsed && !showMobileMenu" /><Expand v-else /></el-icon>
+            <el-icon size="18"><Fold v-if="!isCollapsed && !showMobileMenu" /><Expand v-else /></el-icon>
           </button>
           <h2 class="md:hidden text-sm font-semibold text-gray-700 dark:text-gray-200">
             {{ currentMenuTitle }}
@@ -193,9 +200,9 @@ function handleLogout() {
         </div>
       </el-header>
 
-      <!-- 页面内容 (可滚动) -->
-      <el-main class="flex-1 overflow-y-auto p-4 md:p-6 bg-gray-50 dark:bg-gray-950">
-        <div class="max-w-7xl mx-auto w-full">
+      <!-- 页面内容 -->
+      <el-main class="flex-1 overflow-y-auto p-4 md:p-5 bg-gray-50 dark:bg-gray-950">
+        <div class="w-full">
           <router-view v-slot="{ Component, route: currentRoute }">
             <transition name="fade" mode="out-in">
               <component :is="Component" :key="currentRoute.fullPath" />
@@ -215,5 +222,29 @@ function handleLogout() {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 侧边栏菜单项样式 */
+.sidebar-menu :deep(.el-menu-item) {
+  height: 40px;
+  line-height: 40px;
+  margin: 2px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  transition: all 0.15s ease;
+}
+.sidebar-menu :deep(.el-menu-item:hover) {
+  background: rgba(59, 130, 246, 0.06) !important;
+}
+.sidebar-menu :deep(.el-menu-item.is-active) {
+  background: rgba(59, 130, 246, 0.1) !important;
+  font-weight: 600;
+}
+
+/* 折叠态居中图标 */
+.sidebar-menu :deep(.el-menu--collapse .el-menu-item) {
+  margin: 2px 4px;
+  padding: 0 !important;
+  justify-content: center;
 }
 </style>
