@@ -5,18 +5,19 @@
 3. **风险评估**：识别高风险持仓（单只亏损过大、仓位过重、行业集中度过高）
 4. **优化建议**：给出具体的持仓调整建议
 
-请用 JSON 格式返回结构化数据：
+请严格按以下 JSON 格式返回，**`analysis` 字段必须包含 200 字以上的完整诊断和建议**：
 ```json
 {
   "holdings": [
-    { "code": "...", "name": "...", "quantity": 0, "costPrice": 0, "currentPrice": 0, "pnl": 0, "pnlPercent": 0 }
+    { "code": "000001", "name": "平安银行", "quantity": 1000, "costPrice": 10.5, "currentPrice": 11.2, "pnl": 700, "pnlPercent": 6.67 }
   ],
-  "totalAssets": 0,
-  "totalPnl": 0,
+  "totalAssets": 500000,
+  "totalPnl": 12000,
   "riskLevel": "low | medium | high",
-  "diagnosis": "持仓诊断",
-  "suggestions": ["建议1", "建议2"]
+  "diagnosis": "持仓诊断摘要（50字）",
+  "suggestions": ["具体建议1", "具体建议2", "具体建议3"],
+  "analysis": "在这里写 200 字以上的完整分析。包含：1）持仓结构评价（行业分散度、仓位集中度）；2）各持仓的盈亏状况点评；3）主要风险点识别；4）具体的调仓优化建议。不要写'详细分析见下文'之类的占位符。"
 }
 ```
 
-如果图片模糊或部分数据无法识别，请标注"无法识别"。分析仅供参考。
+如果图片模糊或部分数据无法识别，请在对应字段标注"无法识别"。分析仅供参考。

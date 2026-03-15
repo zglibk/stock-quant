@@ -22,6 +22,16 @@ const syncState = {
   }
 };
 
+// 股票列表刷新状态（独立于K线同步）
+const stockListState = {
+  running: false,
+  startedAt: null,
+  finishedAt: null,
+  error: '',
+  progress: { percent: 0, totalCodes: 0, processedCodes: 0, validStocks: 0 },
+  result: null,
+};
+
 function normalizeCode(raw) {
   const text = String(raw || '').trim();
   if (!text) return '';
@@ -90,16 +100,71 @@ router.get('/indicators/:code', auth, async (req, res) => {
   }
 });
 
-// POST /api/market/calc-indicators - 手动触发指标计算
+// 指标计算状态
+const calcState = {
+  running: false, startedAt: null, finishedAt: null, error: '',
+  progress: { percent: 0, total: 0, success: 0, failed: 0 },
+  result: null,
+};
+
+// POST /api/market/calc-indicators - 异步触发指标计算
 router.post('/calc-indicators', auth, async (req, res) => {
-  try {
-    const codes = req.body.codes; // 可选，不传则计算全部
-    const indicatorCalc = require('../services/indicatorCalc');
-    const result = await indicatorCalc.calcAll(codes || undefined);
-    res.json({ success: true, data: result });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+  if (calcState.running) {
+    return res.json({ success: true, data: calcState, message: '指标计算进行中' });
   }
+
+  calcState.running = true;
+  calcState.startedAt = new Date().toISOString();
+  calcState.finishedAt = null;
+  calcState.error = '';
+  calcState.result = null;
+  calcState.progress = { percent: 0, total: 0, success: 0, failed: 0 };
+
+  res.json({ success: true, data: calcState, message: '已开始后台计算指标' });
+
+  // 后台异步执行
+  try {
+    const codes = req.body.codes;
+    const indicatorCalc = require('../services/indicatorCalc');
+    const { Stock } = require('../models/Market');
+
+    let targetCodes = codes;
+    if (!targetCodes) {
+      const stocks = await Stock.find({ isActive: true }).select('code').lean();
+      targetCodes = stocks.map(s => s.code);
+    }
+
+    calcState.progress.total = targetCodes.length;
+    let success = 0, failed = 0;
+
+    // 分批计算，每批5只，同步更新进度
+    for (let i = 0; i < targetCodes.length; i += 5) {
+      const batch = targetCodes.slice(i, i + 5);
+      await Promise.all(batch.map(async (code) => {
+        try {
+          const r = await indicatorCalc.calcForStock(code);
+          if (r.count > 0) success++;
+        } catch { failed++; }
+      }));
+      calcState.progress.success = success;
+      calcState.progress.failed = failed;
+      calcState.progress.percent = Math.min(99, Math.round(((i + batch.length) / targetCodes.length) * 100));
+    }
+
+    calcState.result = { success, failed, total: targetCodes.length };
+    calcState.progress = { percent: 100, total: targetCodes.length, success, failed };
+  } catch (err) {
+    calcState.error = err.message;
+    calcState.progress.percent = 100;
+  } finally {
+    calcState.running = false;
+    calcState.finishedAt = new Date().toISOString();
+  }
+});
+
+// GET /api/market/calc-indicators/status
+router.get('/calc-indicators/status', auth, async (req, res) => {
+  res.json({ success: true, data: calcState });
 });
 
 // GET /api/market/realtime/:codes - 实时行情 (新浪)
@@ -152,6 +217,51 @@ router.get('/overview', auth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
+});
+
+// POST /api/market/sync-stock-list - 异步刷新 A 股列表 (立即返回，后台执行)
+router.post('/sync-stock-list', auth, async (req, res) => {
+  if (stockListState.running) {
+    return res.json({ success: true, data: stockListState, message: '刷新任务进行中' });
+  }
+
+  stockListState.running = true;
+  stockListState.startedAt = new Date().toISOString();
+  stockListState.finishedAt = null;
+  stockListState.error = '';
+  stockListState.result = null;
+  stockListState.progress = { percent: 0, totalCodes: 0, processedCodes: 0, validStocks: 0 };
+
+  // 立即返回
+  res.json({ success: true, data: stockListState, message: '已开始后台刷新股票列表' });
+
+  // 后台异步执行
+  try {
+    const stocks = await dataFetcher.syncStockList({
+      onProgress: (p) => {
+        stockListState.progress = {
+          percent: p.totalCodes > 0 ? Math.min(99, Math.round((p.processedCodes / p.totalCodes) * 100)) : 0,
+          totalCodes: p.totalCodes,
+          processedCodes: p.processedCodes,
+          validStocks: p.validStocks || 0,
+        };
+      }
+    });
+    stockListState.result = stocks;
+    stockListState.progress.percent = 100;
+    stockListState.progress.validStocks = stocks.updated || 0;
+  } catch (err) {
+    stockListState.error = err.message;
+    stockListState.progress.percent = 100;
+  } finally {
+    stockListState.running = false;
+    stockListState.finishedAt = new Date().toISOString();
+  }
+});
+
+// GET /api/market/sync-stock-list/status - 查询列表刷新进度
+router.get('/sync-stock-list/status', auth, async (req, res) => {
+  res.json({ success: true, data: stockListState });
 });
 
 // POST /api/market/sync - 手动触发数据同步 (admin)

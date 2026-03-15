@@ -65,7 +65,7 @@ async function loadStocks() {
       keyword: filters.q || undefined,
       industry: filters.industry || undefined,
       page: 1,
-      limit: 500
+      limit: 5000
     })
     const stocks = Array.isArray(res?.data)
       ? res.data

@@ -47,7 +47,6 @@ function updatePcRobotPosition() {
 }
 
 onMounted(async () => {
-  themeStore.setTheme('light')
   const savedUser = localStorage.getItem('remember_user')
   if (savedUser) {
     const { username, password } = JSON.parse(savedUser)
@@ -139,16 +138,33 @@ function handleForgotPassword() {
 </script>
 
 <template>
-  <div class="login-page min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#050505] transition-colors duration-300 relative overflow-hidden">
+  <div class="login-page min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0a1628] transition-colors duration-300 relative overflow-hidden">
     
+    <!-- 右上角主题切换 -->
+    <button
+      @click="themeStore.toggleTheme()"
+      class="absolute top-5 right-5 z-50 w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 backdrop-blur-sm"
+      :class="themeStore.theme === 'dark'
+        ? 'bg-gray-800/60 hover:bg-gray-700/80 text-amber-400'
+        : 'bg-white/60 hover:bg-white/90 text-gray-500 shadow-sm border border-gray-200/50'"
+      title="切换主题"
+    >
+      <svg v-if="themeStore.theme === 'dark'" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
+
     <!-- SVG 科技背景 -->
     <TechBackground />
     
     <!-- 背景动态光斑 (叠加在 TechBackground 上，但透明度降低，作为氛围光) -->
     <div class="absolute inset-0 overflow-hidden pointer-events-none opacity-60">
-      <div class="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-blob mix-blend-multiply filter dark:mix-blend-normal dark:bg-blue-500/10"></div>
-      <div class="absolute top-0 right-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-blob animation-delay-2000 mix-blend-multiply filter dark:mix-blend-normal dark:bg-purple-500/10"></div>
-      <div class="absolute -bottom-32 left-1/3 w-96 h-96 bg-teal-500/20 rounded-full blur-3xl animate-blob animation-delay-4000 mix-blend-multiply filter dark:mix-blend-normal dark:bg-teal-500/10"></div>
+      <div class="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-blob mix-blend-multiply filter dark:mix-blend-normal dark:bg-cyan-500/[0.07]"></div>
+      <div class="absolute top-0 right-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-blob animation-delay-2000 mix-blend-multiply filter dark:mix-blend-normal dark:bg-blue-500/[0.06]"></div>
+      <div class="absolute -bottom-32 left-1/3 w-96 h-96 bg-teal-500/20 rounded-full blur-3xl animate-blob animation-delay-4000 mix-blend-multiply filter dark:mix-blend-normal dark:bg-cyan-400/[0.05]"></div>
     </div>
 
     <div class="lg:hidden absolute top-16 right-4 w-[90px] h-[90px] z-[120] opacity-90 pointer-events-auto">
@@ -169,12 +185,12 @@ function handleForgotPassword() {
       </div>
 
       <!-- 右侧 登录框 -->
-      <div ref="loginCardRef" class="w-full max-w-[420px] lg:ml-auto rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.15)] dark:shadow-[0_0_40px_rgba(6,182,212,0.2)] bg-white/80 dark:bg-[#141414]/90 backdrop-blur-sm">
+      <div ref="loginCardRef" class="w-full max-w-[420px] lg:ml-auto rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.15)] dark:shadow-[0_0_40px_rgba(34,211,238,0.15)] bg-white/80 dark:bg-[#0d2137]/85 backdrop-blur-md">
         <div class="rounded-2xl overflow-hidden p-[2.5px] relative">
           <!-- 旋转光影 -->
-          <div class="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[conic-gradient(from_0deg,transparent_0_310deg,#06b6d4_330deg,#8b5cf6_345deg,#06b6d4_360deg)] animate-[spin_6s_linear_infinite] opacity-80 blur-md"></div>
+          <div class="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-[conic-gradient(from_0deg,transparent_0_310deg,#06b6d4_330deg,#8b5cf6_345deg,#06b6d4_360deg)] animate-[spin_6s_linear_infinite] opacity-80 dark:opacity-60 blur-md"></div>
           
-          <div class="relative flex flex-col justify-center p-10 min-h-[500px] bg-white dark:bg-[#141414] rounded-xl shadow-2xl transition-all duration-300">
+          <div class="relative flex flex-col justify-center p-10 min-h-[500px] bg-white dark:bg-[#0d2137] rounded-xl shadow-2xl dark:shadow-[0_4px_30px_rgba(0,0,0,0.3)] transition-all duration-300">
             <h1 class="text-2xl font-bold text-center mb-2 -mt-6 bg-gradient-to-r from-blue-500 via-purple-500 to-teal-400 bg-clip-text text-transparent animate-text-gradient bg-300%">
               {{ isRegister ? '账户注册' : '欢迎登录' }}
             </h1>
@@ -312,10 +328,26 @@ function handleForgotPassword() {
 <style>
 /* 全局覆盖深色模式下的输入框样式 */
 html.dark .login-page .el-input__wrapper {
-  background-color: #1f1f1f !important;
-  box-shadow: 0 0 0 1px #333333 inset !important;
+  background-color: #0a1e35 !important;
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.15) inset !important;
 }
 html.dark .login-page .el-input__wrapper.is-focus {
-  box-shadow: 0 0 0 1px #3b82f6 inset, 0 0 8px rgba(59, 130, 246, 0.5) !important;
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.5) inset, 0 0 10px rgba(34,211,238,0.2) !important;
+}
+html.dark .login-page .el-input__inner {
+  color: #e2e8f0 !important;
+}
+html.dark .login-page .el-input__inner::placeholder {
+  color: #4a6a8a !important;
+}
+html.dark .login-page .el-checkbox__label {
+  color: #8bacc8 !important;
+}
+html.dark .login-page .el-button--primary {
+  background: linear-gradient(135deg, #0e7490, #0891b2) !important;
+  border-color: #06b6d4 !important;
+}
+html.dark .login-page .el-button--primary:hover {
+  background: linear-gradient(135deg, #0891b2, #22d3ee) !important;
 }
 </style>

@@ -393,10 +393,10 @@ async function sendChat() {
           </div>
         </el-card>
 
-        <!-- 技术指标摘要 -->
-        <el-card v-if="latestIndicator" :class="cardClass" shadow="never" class="mt-3">
-          <template #header><span class="sq-section-title">📐 技术指标 · {{ latestIndicator.date }}</span></template>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+        <!-- 技术指标摘要 — 始终显示 -->
+        <el-card :class="cardClass" shadow="never" class="mt-3">
+          <template #header><span class="sq-section-title">📐 技术指标</span></template>
+          <div v-if="latestIndicator" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
             <div>
               <div :class="subtleTextClass">MACD</div>
               <div>DIF: <span :class="(latestIndicator.macd?.dif || 0) >= 0 ? 'text-red-400' : 'text-green-400'">{{ latestIndicator.macd?.dif ?? '--' }}</span></div>
@@ -421,17 +421,21 @@ async function sendChat() {
               <div>J: <span :class="(latestIndicator.kdj?.j || 50) > 80 ? 'text-red-400' : (latestIndicator.kdj?.j || 50) < 20 ? 'text-green-400' : minorTextClass">{{ latestIndicator.kdj?.j ?? '--' }}</span></div>
             </div>
           </div>
+          <div v-else class="text-center py-4 text-xs" :class="emptyTextClass">
+            暂无指标数据，请在行情中心点击"计算指标"
+          </div>
         </el-card>
       </div>
 
       <!-- 右侧 AI 面板 -->
       <div class="space-y-4">
-        <!-- AI 分析结果 -->
-        <el-card v-if="aiResult || aiLoading" :class="cardClass" shadow="never">
+        <!-- AI 分析结果 — 始终显示 -->
+        <el-card :class="cardClass" shadow="never">
           <template #header>
             <div class="flex items-center justify-between">
               <span class="text-sm font-bold text-orange-400">🧠 AI 深度诊断</span>
               <span v-if="aiLoading" class="text-xs animate-pulse" :class="subtleTextClass">分析中...</span>
+              <el-button v-else-if="!aiResult" type="warning" size="small" :loading="aiLoading" @click="aiAnalyze">开始诊断</el-button>
             </div>
           </template>
           
@@ -504,7 +508,9 @@ async function sendChat() {
           
           <!-- 空状态 -->
           <div v-else class="text-center py-8" :class="emptyTextClass">
-            <p>点击上方按钮开始深度诊断</p>
+            <div class="text-3xl mb-3 opacity-30">🧠</div>
+            <p>点击上方"开始诊断"按钮</p>
+            <p class="text-xs mt-1 opacity-60">AI 将分析技术面、基本面，给出综合评分和操作建议</p>
           </div>
         </el-card>
 

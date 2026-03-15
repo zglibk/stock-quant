@@ -12,6 +12,10 @@ const speechText = ref('')
 const speechAlign = ref('right')
 let startX = 0, startY = 0, initialX = 0, initialY = 0, currentX = 0, currentY = 0
 let activeTimer = null, speechTimer = null, waveTimer = null, idleTimer = null
+const eyeLeftX = ref(0)   // 左瞳孔偏移
+const eyeLeftY = ref(0)
+const eyeRightX = ref(0)  // 右瞳孔偏移
+const eyeRightY = ref(0)
 const uid = Math.random().toString(36).slice(2, 10)
 const metalGradientId = `mg-${uid}`
 const darkMetalGradientId = `dmg-${uid}`
@@ -96,12 +100,36 @@ const handleEnd = () => {
 }
 
 const handleEnter = () => { isHover.value = true; if (!showSpeech.value) speakRandom('hover'); startIdleCheck() }
-const handleLeave = () => { isHover.value = false }
+const handleLeave = () => {
+  isHover.value = false
+  // 眼睛回到中心
+  eyeLeftX.value = 0; eyeLeftY.value = 0
+  eyeRightX.value = 0; eyeRightY.value = 0
+}
 const handleActivate = () => { activateEffect(); startIdleCheck() }
+
+// 眼睛追踪鼠标
+function handleGlobalMouseMove(e) {
+  if (!containerRef.value) return
+  const rect = containerRef.value.getBoundingClientRect()
+  const cx = rect.left + rect.width / 2
+  const cy = rect.top + rect.height * 0.35  // 眼睛大约在容器偏上
+  const dx = e.clientX - cx
+  const dy = e.clientY - cy
+  const dist = Math.sqrt(dx * dx + dy * dy)
+  const maxMove = 5  // 瞳孔最大偏移像素
+  const nx = dist > 0 ? (dx / dist) * Math.min(dist / 150, 1) * maxMove : 0
+  const ny = dist > 0 ? (dy / dist) * Math.min(dist / 150, 1) * maxMove : 0
+  eyeLeftX.value = nx
+  eyeLeftY.value = ny
+  eyeRightX.value = nx
+  eyeRightY.value = ny
+}
 
 onMounted(() => {
   updateSpeechAlign()
   window.addEventListener('mousemove', handleMove)
+  window.addEventListener('mousemove', handleGlobalMouseMove)
   window.addEventListener('mouseup', handleEnd)
   window.addEventListener('touchmove', handleMove, { passive: false })
   window.addEventListener('touchend', handleEnd)
@@ -110,6 +138,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   window.removeEventListener('mousemove', handleMove)
+  window.removeEventListener('mousemove', handleGlobalMouseMove)
   window.removeEventListener('mouseup', handleEnd)
   window.removeEventListener('touchmove', handleMove)
   window.removeEventListener('touchend', handleEnd)
@@ -170,8 +199,16 @@ onUnmounted(() => {
             <g :class="['eyes', { 'eyes-excited': isActive }]">
               <ellipse cx="75" cy="60" rx="18" ry="22" :fill="`url(#${eyeGlowId})`" class="animate-blink"/>
               <ellipse cx="125" cy="60" rx="18" ry="22" :fill="`url(#${eyeGlowId})`" class="animate-blink"/>
-              <circle cx="80" cy="55" r="4" fill="white" opacity="0.6"/>
-              <circle cx="130" cy="55" r="4" fill="white" opacity="0.6"/>
+              <!-- 追踪鼠标的瞳孔 -->
+              <circle :cx="78 + eyeLeftX" :cy="58 + eyeLeftY" r="5" fill="white" opacity="0.85">
+                <animate attributeName="opacity" values="0.85;0.5;0.85" dur="3s" repeatCount="indefinite"/>
+              </circle>
+              <circle :cx="128 + eyeRightX" :cy="58 + eyeRightY" r="5" fill="white" opacity="0.85">
+                <animate attributeName="opacity" values="0.85;0.5;0.85" dur="3s" repeatCount="indefinite"/>
+              </circle>
+              <!-- 小光点 -->
+              <circle :cx="74 + eyeLeftX * 0.5" :cy="52 + eyeLeftY * 0.5" r="2" fill="white" opacity="0.4"/>
+              <circle :cx="124 + eyeRightX * 0.5" :cy="52 + eyeRightY * 0.5" r="2" fill="white" opacity="0.4"/>
             </g>
             <g transform="translate(100, 85)" :class="['mouth-bars', { 'mouth-speaking': showSpeech }]">
               <rect x="-20" y="0" width="4" height="4" rx="2" fill="#3b82f6" class="animate-wave-1"/>

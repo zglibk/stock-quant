@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/api/request'
+import marketApi from '@/api/market'
 import { ElMessage } from 'element-plus'
 import { useThemeStore } from '@/stores/themeStore'
 
@@ -15,6 +16,15 @@ const page = ref(1)
 const pageSize = ref(30)
 const syncLoading = ref(false)
 const calcLoading = ref(false)
+const calcProgress = ref(null)
+const calcElapsed = ref(0)
+let calcTimer = null
+let calcPollTimer = null
+const refreshListLoading = ref(false)
+const refreshProgress = ref(null) // { percent, totalCodes, processedCodes, validStocks }
+const refreshElapsed = ref(0)
+let refreshTimer = null
+let refreshPollTimer = null
 const syncStatus = ref(null)
 const syncScope = ref('all')
 const customCodes = ref('')
@@ -151,6 +161,12 @@ async function fetchStocks() {
   }
 }
 
+function handleSyncCommand(command) {
+  syncScope.value = command
+  if (command === 'custom') return  // 展开自定义输入框，用户手动点"开始同步"
+  syncData()
+}
+
 async function syncData() {
   syncLoading.value = true
   try {
@@ -238,17 +254,103 @@ function handleSearch() {
 
 async function calcIndicators() {
   calcLoading.value = true
+  calcProgress.value = { percent: 0, total: 0, success: 0, failed: 0 }
+  calcElapsed.value = 0
+  calcTimer = setInterval(() => { calcElapsed.value++ }, 1000)
+
   try {
-    const res = await request.post('/market/calc-indicators')
-    const r = res.data || {}
-    ElMessage.success(`指标计算完成: 成功 ${r.success || 0} 只, 失败 ${r.failed || 0} 只`)
-    addSyncLog('success', `技术指标计算完成: 成功 ${r.success || 0}/${r.total || 0}`)
+    await marketApi.calcIndicators()
+    startCalcPolling()
   } catch (err) {
-    ElMessage.error('指标计算失败: ' + (err.message || ''))
-    addSyncLog('error', `技术指标计算失败: ${err.message || ''}`)
-  } finally {
-    calcLoading.value = false
+    if (!String(err.message).includes('timeout')) {
+      stopCalcPolling()
+      calcLoading.value = false
+      ElMessage.error('指标计算失败: ' + (err.message || ''))
+    } else {
+      startCalcPolling()
+    }
   }
+}
+
+function startCalcPolling() {
+  if (calcPollTimer) return
+  calcPollTimer = setInterval(async () => {
+    try {
+      const res = await marketApi.getCalcStatus()
+      const st = res.data
+      if (st?.progress) calcProgress.value = st.progress
+      if (!st?.running) {
+        stopCalcPolling()
+        calcLoading.value = false
+        if (st?.error) {
+          ElMessage.error('指标计算失败: ' + st.error)
+          addSyncLog('error', `指标计算失败: ${st.error}`)
+        } else {
+          const r = st?.result || st?.progress || {}
+          ElMessage.success(`指标计算完成: 成功 ${r.success || 0} 只, 失败 ${r.failed || 0} 只`)
+          addSyncLog('success', `指标计算完成: ${r.success || 0}/${r.total || 0}`)
+        }
+      }
+    } catch {}
+  }, 2000)
+}
+
+function stopCalcPolling() {
+  if (calcPollTimer) { clearInterval(calcPollTimer); calcPollTimer = null }
+  if (calcTimer) { clearInterval(calcTimer); calcTimer = null }
+}
+
+async function refreshStockList() {
+  refreshListLoading.value = true
+  refreshProgress.value = { percent: 0, totalCodes: 0, processedCodes: 0, validStocks: 0 }
+  refreshElapsed.value = 0
+  refreshTimer = setInterval(() => { refreshElapsed.value++ }, 1000)
+
+  try {
+    await marketApi.syncStockList()
+    // 开始轮询进度
+    startRefreshPolling()
+  } catch (err) {
+    // 如果请求本身就失败了（非超时）
+    if (!String(err.message).includes('timeout')) {
+      stopRefreshPolling()
+      refreshListLoading.value = false
+      ElMessage.error('刷新失败: ' + (err.message || ''))
+    } else {
+      // timeout 可能是因为后端还在处理（已改为异步），继续轮询
+      startRefreshPolling()
+    }
+  }
+}
+
+function startRefreshPolling() {
+  if (refreshPollTimer) return
+  refreshPollTimer = setInterval(async () => {
+    try {
+      const res = await marketApi.getStockListStatus()
+      const st = res.data
+      if (st?.progress) refreshProgress.value = st.progress
+
+      if (!st?.running) {
+        stopRefreshPolling()
+        refreshListLoading.value = false
+        if (st?.error) {
+          ElMessage.error('刷新失败: ' + st.error)
+          addSyncLog('error', `股票列表刷新失败: ${st.error}`)
+        } else {
+          const count = st?.result?.updated || st?.progress?.validStocks || 0
+          ElMessage.success(`股票列表已刷新: ${count} 只`)
+          addSyncLog('success', `股票列表刷新: ${count} 只`)
+          await fetchStocks()
+        }
+      }
+    } catch {}
+  }, 1500)
+}
+
+function stopRefreshPolling() {
+  if (refreshPollTimer) { clearInterval(refreshPollTimer); refreshPollTimer = null }
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
 }
 
 function goDetail(code) {
@@ -272,46 +374,108 @@ watch(page, fetchStocks)
 
 <template>
   <div>
+    <!-- 顶部：标题 + 搜索 + 操作按钮 -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-      <h2 class="sq-list-title whitespace-nowrap shrink-0">📊 行情中心</h2>
-      <div class="flex flex-wrap gap-2">
-        <el-select v-model="syncScope" style="width: 130px">
-          <el-option v-for="opt in syncScopeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
-        </el-select>
-        <el-input
-          v-if="syncScope === 'custom'"
-          v-model="customCodes"
-          placeholder="输入代码，逗号或空格分隔"
-          clearable
-          style="width: 260px"
-        />
+      <h2 class="text-lg font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap shrink-0">行情中心</h2>
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- 搜索框 -->
         <el-input
           v-model="keyword"
-          placeholder="搜索股票代码或名称"
+          placeholder="搜索代码或名称"
           clearable
-          style="width: 240px"
+          style="width: 200px"
           @keyup.enter="handleSearch"
           @clear="handleSearch"
-        />
+        >
+          <template #prefix><span class="text-gray-400">🔍</span></template>
+        </el-input>
         <el-button @click="handleSearch">搜索</el-button>
-        <el-button type="warning" :loading="syncLoading || isSyncRunning" @click="syncData">
-          {{ isSyncRunning ? '同步中' : '同步数据' }}
-        </el-button>
+
+        <!-- 分隔 -->
+        <div class="hidden md:block w-px h-6 bg-gray-200 dark:bg-gray-700 mx-1"></div>
+
+        <!-- 数据操作按钮组 -->
+        <el-button :loading="refreshListLoading" @click="refreshStockList">🔄 刷新列表</el-button>
+        <el-dropdown trigger="click" @command="handleSyncCommand">
+          <el-button type="warning" :loading="syncLoading || isSyncRunning">
+            {{ isSyncRunning ? '同步中...' : '同步K线 ▾' }}
+          </el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="all">同步全部股票K线</el-dropdown-item>
+              <el-dropdown-item command="current_page">同步当前页股票</el-dropdown-item>
+              <el-dropdown-item command="custom" divided>自定义股票代码...</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
         <el-button type="success" :loading="calcLoading" @click="calcIndicators">📐 计算指标</el-button>
       </div>
     </div>
-    <div v-if="syncScope === 'custom'" class="text-xs mb-2" :class="countTextClass">
-      已识别 {{ customCodeCount }} 只股票代码
+
+    <!-- 自定义代码输入区（仅点击"自定义股票代码"后显示） -->
+    <div v-if="syncScope === 'custom'" class="mb-3 flex items-center gap-2">
+      <el-input
+        v-model="customCodes"
+        placeholder="输入股票代码，逗号或空格分隔，如: 603612 000001 300750"
+        clearable
+        style="max-width: 500px"
+      />
+      <span class="text-xs whitespace-nowrap" :class="countTextClass">已识别 {{ customCodeCount }} 只</span>
+      <el-button type="warning" size="small" :loading="syncLoading || isSyncRunning" @click="syncData">开始同步</el-button>
+      <el-button size="small" @click="syncScope = 'all'">取消</el-button>
     </div>
+
+    <!-- 刷新列表进度条 -->
+    <div v-if="refreshListLoading" class="mb-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin shrink-0"></div>
+          <span class="text-sm font-medium text-blue-700 dark:text-blue-300">正在刷新A股列表...</span>
+        </div>
+        <span class="text-xs text-blue-500 font-mono">{{ refreshElapsed }}s</span>
+      </div>
+      <el-progress
+        :percentage="refreshProgress?.percent || 0"
+        :stroke-width="6"
+        :show-text="false"
+        color="#3b82f6"
+        class="!mb-1"
+      />
+      <div class="flex justify-between text-[11px] text-blue-500 dark:text-blue-400 font-mono mt-1">
+        <span>已探测 {{ (refreshProgress?.processedCodes || 0).toLocaleString() }} / {{ (refreshProgress?.totalCodes || 0).toLocaleString() }} 代码</span>
+        <span>发现 {{ (refreshProgress?.validStocks || 0).toLocaleString() }} 只有效股票</span>
+      </div>
+    </div>
+
+    <!-- 指标计算进度条 -->
+    <div v-if="calcLoading" class="mb-3 px-4 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <div class="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin shrink-0"></div>
+          <span class="text-sm font-medium text-green-700 dark:text-green-300">正在计算技术指标...</span>
+        </div>
+        <span class="text-xs text-green-500 font-mono">{{ calcElapsed }}s</span>
+      </div>
+      <el-progress
+        :percentage="calcProgress?.percent || 0"
+        :stroke-width="6"
+        :show-text="false"
+        color="#10b981"
+        class="!mb-1"
+      />
+      <div class="flex justify-between text-[11px] text-green-500 dark:text-green-400 font-mono mt-1">
+        <span>进度 {{ calcProgress?.percent || 0 }}% · 共 {{ (calcProgress?.total || 0).toLocaleString() }} 只</span>
+        <span>成功 {{ calcProgress?.success || 0 }} · 失败 {{ calcProgress?.failed || 0 }}</span>
+      </div>
+    </div>
+
     <el-alert
       v-if="syncStatus?.running || syncStatus?.error"
       :type="syncStatus?.running ? 'info' : 'error'"
       :title="syncStatus?.running
         ? 'K线同步进行中，请稍候...'
         : `最近一次同步失败：${syncStatus?.error || ''}`"
-      show-icon
-      :closable="false"
-      class="mb-3"
+      show-icon :closable="false" class="mb-3"
     />
     <el-card v-if="shouldShowSyncProgressCard" :class="['sq-list-card', marketCardClass]" shadow="never" class="mb-3">
       <div class="flex items-center justify-between mb-2">
@@ -399,15 +563,17 @@ watch(page, fetchStocks)
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="industry" label="行业" min-width="120">
+        <el-table-column prop="industry" label="行业" min-width="100">
           <template #default="{ row }">
             <el-tag
+              v-if="row.industry"
               size="small"
               :type="industryTagType(row.industry)"
               :effect="isDark ? 'plain' : 'light'"
             >
-              {{ row.industry || '未分类' }}
+              {{ row.industry }}
             </el-tag>
+            <span v-else class="text-gray-300 dark:text-gray-700 text-xs">—</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
